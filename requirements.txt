@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+psycopg2-binary
+celery
+redis
+httpx
+python-jose
+passlib
+python-dotenv
+authlib
+cloudinary
+firebase-admin
+python-multipart
+croniter
