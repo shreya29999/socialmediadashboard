@@ -236,6 +236,9 @@ async def refresh_facebook_token(current_token: str) -> Optional[dict]:
 
 
 async def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
+    if not refresh_token:
+        print("❌ No LinkedIn refresh token available")
+        return None
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -248,11 +251,12 @@ async def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
+            print(f"🔍 LinkedIn refresh response: {response.status_code} {response.text}")
             data = response.json()
 
             if "access_token" in data:
-                expires_in  = data.get("expires_in", 5184000)
-                expires_at  = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+                expires_in = data.get("expires_in", 5184000)
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 return {
                     "access_token"  : data["access_token"],
                     "refresh_token" : data.get("refresh_token", refresh_token),
@@ -263,7 +267,7 @@ async def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
     except Exception as e:
         print(f"❌ LinkedIn token refresh failed: {e}")
         return None
-
+    
 
 async def check_and_refresh_token(user_id: int, platform: str) -> Optional[str]:
     from database import get_social_account, update_access_token
@@ -272,17 +276,27 @@ async def check_and_refresh_token(user_id: int, platform: str) -> Optional[str]:
     if not account:
         print(f"❌ No {platform} account found for user {user_id}")
         return None
-    now         = datetime.now(timezone.utc)
-    expires_at  = account["token_expires_at"]
 
-    if expires_at and expires_at.replace(tzinfo=timezone.utc) > now + timedelta(hours=1):
-        return account["access_token"]  
+    now        = datetime.now(timezone.utc)
+    expires_at = account["token_expires_at"]
+
+    if not expires_at:
+        print(f"✅ {platform} token has no expiry, using as is")
+        return account["access_token"]
+
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if expires_at > now + timedelta(hours=1):
+        print(f"✅ {platform} token still valid")
+        return account["access_token"]
+
     print(f"🔄 Refreshing {platform} token for user {user_id}")
 
     if platform in ("facebook", "instagram"):
         result = await refresh_facebook_token(account["access_token"])
     elif platform == "linkedin":
-        result = await refresh_linkedin_token(account["refresh_token"])
+        result = await refresh_linkedin_token(account.get("refresh_token"))
     else:
         return None
 
@@ -291,5 +305,5 @@ async def check_and_refresh_token(user_id: int, platform: str) -> Optional[str]:
         print(f"✅ {platform} token refreshed successfully")
         return result["access_token"]
 
-    print(f"❌ {platform} token refresh failed for user {user_id}")
-    return None
+    print(f"⚠️ {platform} refresh failed, trying existing token")
+    return account["access_token"]
