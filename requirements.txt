@@ -13,3 +13,6 @@ cloudinary
 firebase-admin
 python-multipart
 croniter
+groq
+feedparser
+httpx

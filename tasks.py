@@ -3,6 +3,13 @@
 # Section 4: Publish Post Task (triggered on approval)
 
 from celery_app import celery_app
+import os
+from database import execute_query
+from database import init_db
+from datetime import datetime, timezone
+import asyncio
+from event_fetcher import run_recommendation_pipeline
+import time
 from database import (
     get_posts_due_for_confirmation,
     get_expired_awaiting_posts,
@@ -32,14 +39,10 @@ from utils import (
     check_and_refresh_token
 )
 
-from database import init_db
+
 init_db()
-from datetime import datetime, timezone
-import asyncio
-import time
 
 BASE_URL = "http://localhost:8001"
-
 
 @celery_app.task(name="tasks.send_confirmation_task")
 def send_confirmation_task():
@@ -489,3 +492,105 @@ def _generate_next_occurrence(post: dict):
 
     except Exception as e:
         print(f"❌ Failed to generate next occurrence: {e}")
+
+# ================================================================
+# SECTION 5 — AI RECOMMENDATION TASK
+# ================================================================
+
+import asyncio
+from event_fetcher import run_recommendation_pipeline
+
+@celery_app.task(name="tasks.generate_ai_posts_task")
+def generate_ai_posts_task(user_id: int):
+    print(f"🤖 Running AI post generation for user {user_id}...")
+    try:
+        posts = asyncio.run(run_recommendation_pipeline(user_id))
+        if not posts:
+            print(f"⚠️ No posts generated for user {user_id}")
+            return
+        user = get_user_by_id(user_id)
+        if not user:
+            print(f"❌ User {user_id} not found")
+            return
+
+        for post_data in posts:
+            try:
+                template = execute_query("""
+                    INSERT INTO post_templates
+                        (user_id, content_text, media_url, platforms,
+                         recurrence_type, interval_days, start_date, timezone)
+                    VALUES (%s, %s, NULL, %s, 'ONE_TIME', 1, %s, 'UTC')
+                    RETURNING id
+                """, (
+                    user_id,
+                    post_data["content_text"],
+                    post_data["platforms"],
+                    post_data["scheduled_at"]
+                ), fetch="one")
+
+                if not template:
+                    continue
+
+                template_id = template["id"]
+                post = execute_query("""
+                    INSERT INTO scheduled_posts
+                        (template_id, scheduled_at, status)
+                    VALUES (%s, %s, 'awaiting_approval')
+                    RETURNING id
+                """, (template_id, post_data["scheduled_at"]), fetch="one")
+
+                if not post:
+                    continue
+
+                post_id = post["id"]
+                from utils import generate_confirmation_token, hash_token
+                raw_token = generate_confirmation_token()
+                hashed    = hash_token(raw_token)
+                save_confirmation_token(post_id, hashed)
+                from services import send_confirmation_email
+                BASE_URL    = os.getenv("BASE_URL", "http://localhost:8001")
+                approve_url = f"{BASE_URL}/approvals/{post_id}/approve?token={raw_token}"
+                reject_url  = f"{BASE_URL}/approvals/{post_id}/reject?token={raw_token}"
+
+                scheduled_str = post_data["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
+
+                send_confirmation_email(
+                    to_email     = user["email"],
+                    post_content = post_data["content_text"],
+                    platforms    = post_data["platforms"],
+                    scheduled_at = scheduled_str,
+                    approve_url  = approve_url,
+                    reject_url   = reject_url
+                )
+
+                print(f"✅ AI post created (id: {post_id}) | {post_data['trigger_type']}: {post_data['trigger_name']}")
+
+            except Exception as e:
+                print(f"❌ Failed to save post for user {user_id}: {e}")
+                continue
+
+        print(f"✅ AI generation done for user {user_id} — {len(posts)} posts queued")
+
+    except Exception as e:
+        print(f"❌ generate_ai_posts_task failed for user {user_id}: {e}")
+
+
+@celery_app.task(name="tasks.generate_ai_posts_for_all_users")
+def generate_ai_posts_for_all_users():
+    users = execute_query("""
+        SELECT user_id FROM user_profiles
+        WHERE persona IS NOT NULL
+        AND industry IS NOT NULL
+        AND brand_name IS NOT NULL
+        AND tone IS NOT NULL
+        AND country_code IS NOT NULL
+    """, fetch="all")
+
+    if not users:
+        print("⚠️ No users with completed profiles found")
+        return
+
+    print(f"🤖 Triggering AI generation for {len(users)} users...")
+    for user in users:
+        generate_ai_posts_task.delay(user["user_id"])
+        print(f"✅ Queued AI generation for user {user['user_id']}")

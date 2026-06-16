@@ -26,6 +26,7 @@ from database import (
     init_db,
     create_user,
     get_user_by_email,
+    execute_query,
     get_user_by_id,
     save_social_account,
     get_social_account,
@@ -474,6 +475,55 @@ class UpdatePostRequest(BaseModel):
     scheduled_at : Optional[str] = None
 
 
+class UserProfileRequest(BaseModel):
+    persona        : str           
+    industry       : str           
+    brand_name     : str           
+    tone           : str           
+    audience       : str           
+    country_code   : str           
+    language       : str = "english"
+    posts_per_week : int = 3
+
+
+
+@app.post("/user/profile")
+def save_user_profile(req: UserProfileRequest, current_user: dict = Depends(get_current_user)):
+    execute_query("""
+        INSERT INTO user_profiles 
+            (user_id, persona, industry, brand_name, tone, audience, country_code, language, posts_per_week)
+        VALUES 
+            (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET
+            persona        = EXCLUDED.persona,
+            industry       = EXCLUDED.industry,
+            brand_name     = EXCLUDED.brand_name,
+            tone           = EXCLUDED.tone,
+            audience       = EXCLUDED.audience,
+            country_code   = EXCLUDED.country_code,
+            language       = EXCLUDED.language,
+            posts_per_week = EXCLUDED.posts_per_week,
+            updated_at     = NOW()
+    """, (
+        current_user["user_id"], req.persona, req.industry,
+        req.brand_name, req.tone, req.audience,
+        req.country_code, req.language, req.posts_per_week
+    ))
+    return {"message": "Profile saved ✅"}
+
+
+@app.get("/user/profile")
+def get_user_profile(current_user: dict = Depends(get_current_user)):
+    profile = execute_query(
+        "SELECT * FROM user_profiles WHERE user_id = %s",
+        (current_user["user_id"],),
+        fetch="one"
+    )
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found. Please complete questionnaire.")
+    return profile
+
+
 @app.post("/posts/")
 def create_post(req: CreatePostRequest, current_user: dict = Depends(get_current_user)):
     user_id = current_user["user_id"]
@@ -540,7 +590,6 @@ def get_post(post_id: int, current_user: dict = Depends(get_current_user)):
 
 @app.put("/posts/{post_id}")
 def edit_post(post_id: int, req: UpdatePostRequest, current_user: dict = Depends(get_current_user)):
-    """Edit a scheduled post. Only works on posts with status 'scheduled'."""
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
@@ -798,3 +847,12 @@ def get_calendar(month: str = Query(..., description="Format: YYYY-MM"), current
         })
 
     return {"month": month, "calendar": calendar_data, "total": len(posts) if posts else 0}
+
+
+from tasks import generate_ai_posts_task
+
+@app.post("/ai/generate")
+def trigger_ai_generation(current_user: dict = Depends(get_current_user)):
+    """Manually trigger AI post generation for testing."""
+    generate_ai_posts_task.delay(current_user["user_id"])
+    return {"message": "AI post generation started ✅ Check your email shortly."}

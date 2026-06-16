@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Social Dashboard</title>
+<title>SocialDesk</title>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -26,6 +26,9 @@
   --danger-text: #991b1b;
   --info-bg: #e8f2fe;
   --info-text: #1a4fa0;
+  --ai-bg: #f3f0ff;
+  --ai-text: #5b21b6;
+  --ai-border: rgba(91,33,182,0.2);
   --fb: #1877f2;
   --ig: #c13584;
   --li: #0a66c2;
@@ -33,7 +36,6 @@
 
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; min-height: 100vh; }
 
-/* ── SCREENS ── */
 .screen { display: none; min-height: 100vh; }
 .screen.active { display: flex; flex-direction: column; }
 
@@ -47,8 +49,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .auth-logo p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); margin-bottom: 6px; }
-.form-group input { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 10px 13px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
-.form-group input:focus { border-color: var(--text); box-shadow: 0 0 0 3px rgba(24,24,27,0.07); }
+.form-group input, .form-group select { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 10px 13px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
+.form-group input:focus, .form-group select:focus { border-color: var(--text); box-shadow: 0 0 0 3px rgba(24,24,27,0.07); }
 .btn-primary { width: 100%; background: var(--text); color: #fff; border: none; border-radius: var(--radius); padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 0.5rem; transition: opacity 0.15s, transform 0.1s; }
 .btn-primary:hover { opacity: 0.87; }
 .btn-primary:active { transform: scale(0.99); }
@@ -62,33 +64,29 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .divider span { background: var(--surface); position: relative; padding: 0 10px; }
 .demo-hint { background: var(--info-bg); color: var(--info-text); border-radius: var(--radius); padding: 10px 13px; font-size: 12px; margin-bottom: 1rem; border: 1px solid rgba(26,79,160,0.15); }
 
-/* ── CONNECT PLATFORMS ── */
+/* ── CONNECT ── */
 .connect-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 3rem 1rem 2rem; background: linear-gradient(135deg, #f5f5f2 0%, #e8f0f8 100%); }
 .connect-box { width: 100%; max-width: 480px; }
 .connect-header { text-align: center; margin-bottom: 2rem; }
 .connect-header h2 { font-size: 22px; font-weight: 700; }
 .connect-header p { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
-.steps-bar { display: flex; align-items: center; gap: 0; margin-bottom: 2.5rem; }
-.step-item { flex: 1; text-align: center; }
+.steps-bar { display: flex; align-items: center; justify-content: center; margin-bottom: 2.5rem; }
+.step-item { flex: 0 0 auto; text-align: center; }
 .step-circle { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; margin-bottom: 4px; transition: all 0.2s; }
 .step-circle.done { background: var(--success-text); color: #fff; }
 .step-circle.active { background: var(--text); color: #fff; }
 .step-circle.todo { background: var(--border-strong); color: var(--text-muted); }
 .step-label { font-size: 11px; color: var(--text-muted); }
-.step-line { height: 2px; background: var(--border); flex: 1; margin-bottom: 16px; }
+.step-line { height: 2px; background: var(--border); width: 48px; margin-bottom: 16px; }
 .step-line.done-line { background: var(--success-text); }
-
-.platform-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.15rem 1.25rem; margin-bottom: 0.7rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; transition: border-color 0.2s, background 0.2s; }
+.platform-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.15rem 1.25rem; margin-bottom: 0.7rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; transition: border-color 0.2s; }
 .platform-card.connected { border-color: rgba(47,107,16,0.35); background: #f6fdf0; }
 .platform-left { display: flex; align-items: center; gap: 12px; }
 .plat-icon { width: 44px; height: 44px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .plat-icon svg { width: 22px; height: 22px; }
-.plat-icon.fb { background: #e8f2ff; }
-.plat-icon.fb svg { fill: var(--fb); }
-.plat-icon.ig { background: #fce8f4; }
-.plat-icon.ig svg { fill: var(--ig); }
-.plat-icon.li { background: #e8f2fd; }
-.plat-icon.li svg { fill: var(--li); }
+.plat-icon.fb { background: #e8f2ff; } .plat-icon.fb svg { fill: var(--fb); }
+.plat-icon.ig { background: #fce8f4; } .plat-icon.ig svg { fill: var(--ig); }
+.plat-icon.li { background: #e8f2fd; } .plat-icon.li svg { fill: var(--li); }
 .plat-name { font-size: 14px; font-weight: 600; }
 .plat-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .btn-connect { border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; font-family: inherit; background: transparent; color: var(--text); white-space: nowrap; transition: background 0.15s; flex-shrink: 0; display: flex; align-items: center; gap: 6px; }
@@ -96,32 +94,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .btn-connect.connected { background: var(--success-bg); color: var(--success-text); border-color: transparent; cursor: default; }
 .btn-continue { width: 100%; background: var(--text); color: #fff; border: none; border-radius: var(--radius); padding: 13px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 1.2rem; transition: opacity 0.15s; }
 .btn-continue:hover { opacity: 0.87; }
-.btn-skip { width: 100%; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px; color: var(--text-muted); cursor: pointer; font-family: inherit; margin-top: 0.5rem; transition: background 0.15s; }
+.btn-skip { width: 100%; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px; color: var(--text-muted); cursor: pointer; font-family: inherit; margin-top: 0.5rem; }
 .btn-skip:hover { background: var(--bg); }
 
-/* ── LOADING SCREEN ── */
+/* ── QUESTIONNAIRE ── */
+.quest-wrap { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 3rem 1rem 2rem; background: linear-gradient(135deg, #f5f5f2 0%, #e8f0f8 100%); }
+.quest-box { width: 100%; max-width: 520px; }
+.quest-header { text-align: center; margin-bottom: 2rem; }
+.quest-header h2 { font-size: 22px; font-weight: 700; }
+.quest-header p { font-size: 14px; color: var(--text-muted); margin-top: 6px; }
+.quest-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.75rem; margin-bottom: 1rem; }
+.quest-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
+.quest-card h3 span { font-size: 18px; }
+.option-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.option-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.option-btn { border: 1.5px solid var(--border-strong); border-radius: var(--radius); padding: 10px 12px; font-size: 13px; font-family: inherit; background: var(--surface); color: var(--text); cursor: pointer; text-align: left; transition: all 0.15s; font-weight: 500; }
+.option-btn:hover { background: var(--bg); border-color: var(--text); }
+.option-btn.selected { background: var(--text); color: #fff; border-color: var(--text); }
+.option-btn .opt-icon { display: block; font-size: 18px; margin-bottom: 4px; }
+.option-btn .opt-label { display: block; font-size: 12px; font-weight: 600; }
+.option-btn .opt-desc { display: block; font-size: 11px; opacity: 0.7; margin-top: 1px; }
+.quest-input { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 10px 13px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; transition: border-color 0.15s; }
+.quest-input:focus { border-color: var(--text); box-shadow: 0 0 0 3px rgba(24,24,27,0.06); }
+.quest-select { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 10px 13px; font-size: 14px; font-family: inherit; color: var(--text); background: var(--surface); outline: none; }
+.range-row { display: flex; align-items: center; gap: 12px; }
+.range-row input[type=range] { flex: 1; accent-color: var(--text); }
+.range-val { font-size: 16px; font-weight: 700; min-width: 28px; text-align: center; }
+.quest-ai-hint { background: var(--ai-bg); border: 1px solid var(--ai-border); border-radius: var(--radius); padding: 11px 14px; font-size: 12px; color: var(--ai-text); margin-bottom: 1rem; display: flex; align-items: flex-start; gap: 8px; }
+.quest-ai-hint svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 1px; fill: none; stroke: var(--ai-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── LOADING ── */
 .loading-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; background: var(--bg); }
 .spinner { width: 38px; height: 38px; border: 2.5px solid var(--border-strong); border-top-color: var(--text); border-radius: 50%; animation: spin 0.75s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-msg { font-size: 14px; color: var(--text-muted); }
 .loading-sub { font-size: 12px; color: var(--text-faint); }
-
-/* OAuth mock popup */
-.oauth-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 1rem; }
-.oauth-overlay.open { display: flex; }
-.oauth-popup { background: var(--surface); border-radius: 16px; padding: 2rem; width: 100%; max-width: 360px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.25); }
-.oauth-popup .plat-big-icon { width: 64px; height: 64px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 1rem; }
-.oauth-popup .plat-big-icon svg { width: 36px; height: 36px; }
-.oauth-popup h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
-.oauth-popup p { font-size: 13px; color: var(--text-muted); margin-bottom: 1.5rem; }
-.oauth-permissions { text-align: left; background: var(--bg); border-radius: var(--radius); padding: 12px; margin-bottom: 1.5rem; }
-.oauth-permissions p { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
-.oauth-perm { font-size: 13px; padding: 5px 0; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
-.oauth-perm:last-child { border-bottom: none; }
-.oauth-perm-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success-text); flex-shrink: 0; }
-.oauth-btn-allow { width: 100%; border: none; border-radius: var(--radius); padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; color: white; margin-bottom: 8px; transition: opacity 0.15s; }
-.oauth-btn-allow:hover { opacity: 0.87; }
-.oauth-btn-cancel { width: 100%; background: transparent; border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; font-size: 13px; color: var(--text-muted); cursor: pointer; font-family: inherit; }
 
 /* ── TOPBAR ── */
 .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 1.5rem; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
@@ -132,20 +139,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .topbar-user { font-size: 13px; color: var(--text-muted); }
 .avatar-btn { width: 34px; height: 34px; border-radius: 50%; background: var(--info-bg); color: var(--info-text); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; cursor: pointer; border: none; font-family: inherit; position: relative; transition: box-shadow 0.15s; }
 .avatar-btn:hover { box-shadow: 0 0 0 3px rgba(26,79,160,0.2); }
-.avatar-menu { position: absolute; top: calc(100% + 8px); right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px; min-width: 160px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); display: none; z-index: 200; }
+.avatar-menu { position: absolute; top: calc(100% + 8px); right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 6px; min-width: 180px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); display: none; z-index: 200; }
 .avatar-menu.open { display: block; }
 .avatar-menu-item { display: block; width: 100%; text-align: left; background: transparent; border: none; padding: 8px 12px; font-size: 13px; cursor: pointer; font-family: inherit; color: var(--text); border-radius: 7px; transition: background 0.1s; }
 .avatar-menu-item:hover { background: var(--bg); }
 .avatar-menu-item.danger { color: var(--danger-text); }
 .avatar-wrap { position: relative; }
+.avatar-menu-divider { height: 1px; background: var(--border); margin: 4px 0; }
 
-/* ── DASHBOARD BODY ── */
+/* ── DASHBOARD ── */
 .dash-body { padding: 1.5rem; flex: 1; max-width: 1100px; width: 100%; margin: 0 auto; }
-
-/* ── PAGE HEADER ── */
-.page-header { margin-bottom: 1.5rem; }
-.page-header h2 { font-size: 20px; font-weight: 700; }
-.page-header p { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+.page-header { margin-bottom: 1.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.page-header-left h2 { font-size: 20px; font-weight: 700; }
+.page-header-left p { font-size: 13px; color: var(--text-muted); margin-top: 3px; }
+.btn-ai-generate { background: var(--ai-bg); color: var(--ai-text); border: 1.5px solid var(--ai-border); border-radius: var(--radius); padding: 9px 16px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 7px; transition: all 0.15s; white-space: nowrap; }
+.btn-ai-generate:hover { background: #ede9ff; }
+.btn-ai-generate:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ai-generate svg { width: 15px; height: 15px; fill: none; stroke: var(--ai-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ── METRICS ── */
 .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
@@ -154,6 +164,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .metric-card.mc-blue::after { background: var(--info-text); }
 .metric-card.mc-green::after { background: var(--success-text); }
 .metric-card.mc-orange::after { background: var(--warning-text); }
+.metric-card.mc-purple::after { background: var(--ai-text); }
 .metric-card.mc-gray::after { background: var(--text-faint); }
 .metric-label { font-size: 11px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
 .metric-value { font-size: 28px; font-weight: 700; }
@@ -164,10 +175,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .card-title { font-size: 14px; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
 .card-title svg { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.6; }
 .count-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; background: var(--warning-bg); color: var(--warning-text); margin-left: 2px; }
-
-/* ── GRID ── */
+.count-badge.ai { background: var(--ai-bg); color: var(--ai-text); }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
-.grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem; }
 
 /* ── BADGES ── */
 .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
@@ -175,9 +184,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .badge-warning { background: var(--warning-bg); color: var(--warning-text); }
 .badge-danger { background: var(--danger-bg); color: var(--danger-text); }
 .badge-info { background: var(--info-bg); color: var(--info-text); }
+.badge-ai { background: var(--ai-bg); color: var(--ai-text); }
 .badge-gray { background: #f1f1ef; color: #6b6b6b; }
 
-/* ── PLATFORM STATUS ROWS ── */
+/* ── PLATFORM STATUS ── */
 .plat-status-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .plat-status-row:last-child { border-bottom: none; }
 .plat-row-left { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 500; }
@@ -185,11 +195,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 .dot-green { background: #3b8a16; }
 .dot-red { background: #dc2626; }
-.dot-gray { background: var(--text-faint); }
 .btn-manage-conn { font-size: 12px; padding: 5px 11px; border: 1px solid var(--border-strong); border-radius: 7px; background: transparent; cursor: pointer; font-family: inherit; color: var(--text); transition: background 0.1s; }
 .btn-manage-conn:hover { background: var(--bg); }
 
-/* ── UPCOMING POSTS ── */
+/* ── POST ITEMS ── */
 .post-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .post-item:last-child { border-bottom: none; }
 .post-preview { font-size: 13px; color: var(--text); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -200,8 +209,37 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .plat-chip.ig { background: #fce8f4; color: var(--ig); }
 .plat-chip.li { background: #e8f2fd; color: var(--li); }
 
+/* ── AI SUGGESTION CARDS ── */
+.ai-card { background: #faf8ff; border: 1.5px solid var(--ai-border); border-radius: var(--radius); padding: 13px; margin-bottom: 8px; }
+.ai-card:last-child { margin-bottom: 0; }
+.ai-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ai-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: var(--ai-bg); color: var(--ai-text); text-transform: uppercase; letter-spacing: 0.04em; }
+.ai-trigger { font-size: 11px; color: var(--text-muted); }
+.ai-content { font-size: 13px; color: var(--text); margin-bottom: 8px; font-style: italic; line-height: 1.5; }
+.ai-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ai-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-ai-approve { background: var(--success-bg); color: var(--success-text); border: none; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; }
+.btn-ai-approve:hover { opacity: 0.8; }
+.btn-ai-reject { background: var(--danger-bg); color: var(--danger-text); border: none; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.btn-ai-reject:hover { opacity: 0.8; }
+.ai-empty { text-align: center; padding: 1.5rem; color: var(--text-muted); font-size: 13px; }
+.ai-empty-icon { font-size: 28px; margin-bottom: 6px; }
+
+/* ── APPROVAL CARDS ── */
+.approval-card { background: #fffdf5; border: 1px solid rgba(186,117,23,0.28); border-radius: var(--radius); padding: 13px; margin-bottom: 8px; }
+.approval-card:last-child { margin-bottom: 0; }
+.approval-content { font-size: 13px; color: var(--text); margin-bottom: 5px; font-style: italic; }
+.approval-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 11px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.approval-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-approve { background: var(--success-bg); color: var(--success-text); border: none; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; }
+.btn-approve:hover { opacity: 0.8; }
+.btn-reject-sm { background: var(--danger-bg); color: var(--danger-text); border: none; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.btn-reject-sm:hover { opacity: 0.8; }
+.btn-edit-sm { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; }
+.btn-edit-sm:hover { background: #eee; }
+
 /* ── COMPOSER ── */
-.compose-textarea { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 11px 13px; font-size: 13px; font-family: inherit; color: var(--text); background: #fafaf8; resize: none; height: 100px; outline: none; transition: border-color 0.15s, box-shadow 0.15s, background 0.15s; }
+.compose-textarea { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 11px 13px; font-size: 13px; font-family: inherit; color: var(--text); background: #fafaf8; resize: none; height: 100px; outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
 .compose-textarea:focus { border-color: var(--text); background: var(--surface); box-shadow: 0 0 0 3px rgba(24,24,27,0.06); }
 .char-count { font-size: 11px; color: var(--text-faint); text-align: right; margin-top: 5px; }
 .char-count.warn { color: var(--warning-text); }
@@ -212,25 +250,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .plat-toggle-label:has(input:checked) { color: var(--text); font-weight: 500; }
 .plat-toggle-label input { cursor: pointer; accent-color: var(--text); }
 .compose-row2 { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.compose-select, .compose-dt { font-size: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 8px 11px; background: var(--surface); color: var(--text); font-family: inherit; outline: none; transition: border-color 0.15s; }
-.compose-select:focus, .compose-dt:focus { border-color: var(--text); }
+.compose-select, .compose-dt { font-size: 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 8px 11px; background: var(--surface); color: var(--text); font-family: inherit; outline: none; }
 .btn-schedule { background: var(--text); color: #fff; border: none; border-radius: var(--radius); padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 7px; transition: opacity 0.15s; margin-left: auto; }
 .btn-schedule:hover { opacity: 0.85; }
 .btn-schedule:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-schedule svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-
-/* ── APPROVAL CARDS ── */
-.approval-card { background: #fffdf5; border: 1px solid rgba(186,117,23,0.28); border-radius: var(--radius); padding: 13px; margin-bottom: 8px; }
-.approval-card:last-child { margin-bottom: 0; }
-.approval-content { font-size: 13px; color: var(--text); margin-bottom: 5px; font-style: italic; }
-.approval-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 11px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.approval-btns { display: flex; gap: 8px; }
-.btn-approve { background: var(--success-bg); color: var(--success-text); border: none; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; transition: opacity 0.15s; }
-.btn-approve:hover { opacity: 0.8; }
-.btn-reject-sm { background: var(--danger-bg); color: var(--danger-text); border: none; border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; transition: opacity 0.15s; }
-.btn-reject-sm:hover { opacity: 0.8; }
-.btn-edit-sm { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 7px; padding: 7px 14px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit; transition: background 0.1s; }
-.btn-edit-sm:hover { background: #eee; }
 
 /* ── TABS ── */
 .tabs { display: flex; gap: 4px; margin-bottom: 1rem; flex-wrap: wrap; }
@@ -241,7 +265,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 /* ── CALENDAR ── */
 .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .cal-month-label { font-size: 14px; font-weight: 600; }
-.cal-nav-btn { background: transparent; border: 1px solid var(--border); border-radius: 7px; width: 30px; height: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.1s; }
+.cal-nav-btn { background: transparent; border: 1px solid var(--border); border-radius: 7px; width: 30px; height: 30px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .cal-nav-btn:hover { background: var(--bg); }
 .cal-nav-btn svg { width: 14px; height: 14px; stroke: var(--text); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 .cal-legend { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
@@ -250,7 +274,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .cal-grid-wrap { overflow-x: auto; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; min-width: 480px; }
 .cal-header-cell { font-size: 11px; color: var(--text-faint); font-weight: 600; text-align: center; padding: 6px 0; text-transform: uppercase; letter-spacing: 0.04em; }
-.cal-day { min-height: 54px; border: 1px solid var(--border); border-radius: 7px; padding: 5px; font-size: 11px; cursor: pointer; background: var(--surface); transition: background 0.1s; }
+.cal-day { min-height: 54px; border: 1px solid var(--border); border-radius: 7px; padding: 5px; font-size: 11px; cursor: pointer; background: var(--surface); }
 .cal-day:hover { background: #f9f9f7; }
 .cal-day.other { background: transparent; border-color: transparent; color: var(--text-faint); }
 .cal-day.today { border-color: var(--text); border-width: 1.5px; }
@@ -262,22 +286,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .cdot-green { background: var(--success-text); }
 .cdot-orange { background: var(--warning-text); }
 .cdot-red { background: var(--danger-text); }
+.cdot-purple { background: var(--ai-text); }
 
 /* ── ACTIVITY LOG ── */
 .activity-item { padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 10px; }
 .activity-item:last-child { border-bottom: none; }
 .activity-icon { width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
 .activity-icon svg { width: 14px; height: 14px; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-.activity-icon.posted { background: var(--success-bg); }
-.activity-icon.posted svg { stroke: var(--success-text); }
-.activity-icon.scheduled { background: var(--info-bg); }
-.activity-icon.scheduled svg { stroke: var(--info-text); }
-.activity-icon.awaiting_approval { background: var(--warning-bg); }
-.activity-icon.awaiting_approval svg { stroke: var(--warning-text); }
-.activity-icon.failed { background: var(--danger-bg); }
-.activity-icon.failed svg { stroke: var(--danger-text); }
-.activity-icon.cancelled { background: #f1f1ef; }
-.activity-icon.cancelled svg { stroke: var(--text-muted); }
+.activity-icon.posted { background: var(--success-bg); } .activity-icon.posted svg { stroke: var(--success-text); }
+.activity-icon.scheduled { background: var(--info-bg); } .activity-icon.scheduled svg { stroke: var(--info-text); }
+.activity-icon.awaiting_approval { background: var(--warning-bg); } .activity-icon.awaiting_approval svg { stroke: var(--warning-text); }
+.activity-icon.failed { background: var(--danger-bg); } .activity-icon.failed svg { stroke: var(--danger-text); }
+.activity-icon.cancelled { background: #f1f1ef; } .activity-icon.cancelled svg { stroke: var(--text-muted); }
 .activity-body { flex: 1; min-width: 0; }
 .activity-text { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
 .activity-meta { font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -287,62 +307,56 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--text-muted); font-size: 13px; }
 .empty-state svg { width: 36px; height: 36px; display: block; margin: 0 auto 10px; opacity: 0.25; fill: none; stroke: var(--text); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 
-/* ── MODAL ── */
+/* ── MODALS ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 500; padding: 1rem; }
 .modal-overlay.open { display: flex; }
-.modal-box { background: var(--surface); border-radius: var(--radius-lg); padding: 1.75rem; width: 100%; max-width: 420px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); }
+.modal-box { background: var(--surface); border-radius: var(--radius-lg); padding: 1.75rem; width: 100%; max-width: 460px; box-shadow: 0 20px 50px rgba(0,0,0,0.18); max-height: 90vh; overflow-y: auto; }
 .modal-box h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
 .modal-box p { font-size: 13px; color: var(--text-muted); margin-bottom: 1.25rem; }
 .modal-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 1.25rem; }
 .btn-secondary { background: transparent; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 9px 18px; font-size: 13px; cursor: pointer; font-family: inherit; color: var(--text); }
 .btn-secondary:hover { background: var(--bg); }
 .btn-danger-full { background: var(--danger-bg); color: var(--danger-text); border: none; border-radius: var(--radius); padding: 9px 18px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
-.btn-danger-full:hover { opacity: 0.85; }
 .modal-select { width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius); padding: 9px 11px; font-size: 13px; font-family: inherit; background: var(--surface); color: var(--text); outline: none; }
 
+/* ── PROFILE MODAL ── */
+.profile-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.profile-row:last-child { border-bottom: none; }
+.profile-row-label { color: var(--text-muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.profile-row-val { font-weight: 500; text-align: right; }
+
 /* ── TOAST ── */
-#toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; padding: 11px 22px; border-radius: 30px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none; z-index: 9999; white-space: nowrap; transform: translateX(-50%) translateY(12px); }
+#toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(12px); background: var(--text); color: #fff; padding: 11px 22px; border-radius: 30px; font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none; z-index: 9999; white-space: nowrap; }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* ── SUCCESS ANIMATION ── */
 @keyframes fadeInUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 .fade-in-up { animation: fadeInUp 0.3s ease both; }
 
 @media (max-width: 768px) {
   .metrics { grid-template-columns: repeat(2, 1fr); }
-  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: 1fr; }
   .dash-body { padding: 1rem; }
   .topbar { padding: 0 1rem; }
   .topbar-user { display: none; }
+  .option-grid { grid-template-columns: 1fr 1fr; }
+  .option-grid.cols-3 { grid-template-columns: 1fr 1fr; }
+  .page-header { flex-direction: column; }
 }
-@media (max-width: 460px) {
-  .metrics { grid-template-columns: 1fr 1fr; }
-  .plat-toggles { flex-wrap: wrap; }
-}
-
-/* media upload */
 #media-dropzone:hover { border-color: var(--text) !important; background: var(--bg) !important; }
-
 </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- SCREEN: LOGIN -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══════════════ LOGIN ═══════════════ -->
 <div class="screen active" id="screen-login">
   <div class="auth-wrap">
     <div class="auth-box">
       <div class="auth-logo">
-        <div class="auth-icon">
-          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </div>
+        <div class="auth-icon"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
         <h1>SocialDesk</h1>
         <p>Schedule and automate your posts</p>
       </div>
-      <div class="demo-hint">
-        <strong>Demo:</strong> Use any email + password to sign in, or click the button below.
-      </div>
+      <div class="demo-hint"><strong>Demo:</strong> Use any email + password to sign in.</div>
       <div class="error-alert" id="login-error"></div>
       <div class="form-group">
         <label>Email</label>
@@ -352,9 +366,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <label>Password</label>
         <input type="password" id="login-password" placeholder="••••••••" value="demo1234">
       </div>
-      <button class="btn-primary" id="btn-login" onclick="doLogin()">
-        <span id="login-label">Sign in</span>
-      </button>
+      <button class="btn-primary" id="btn-login" onclick="doLogin()"><span id="login-label">Sign in</span></button>
       <div class="divider"><span>or</span></div>
       <button class="btn-primary" style="background:#f1f1ef;color:var(--text);margin-top:0;" onclick="quickDemo()">Continue as demo user</button>
       <div class="auth-switch">No account? <a onclick="showScreen('screen-register')">Sign up free</a></div>
@@ -362,41 +374,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- SCREEN: REGISTER -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══════════════ REGISTER ═══════════════ -->
 <div class="screen" id="screen-register">
   <div class="auth-wrap">
     <div class="auth-box">
       <div class="auth-logo">
-        <div class="auth-icon">
-          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-        </div>
+        <div class="auth-icon"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
         <h1>Create account</h1>
         <p>Start automating your social media</p>
       </div>
       <div class="error-alert" id="reg-error"></div>
-      <div class="form-group">
-        <label>Your name</label>
-        <input type="text" id="reg-name" placeholder="Shreya Kapoor">
-      </div>
-      <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="reg-email" placeholder="you@email.com">
-      </div>
-      <div class="form-group">
-        <label>Password</label>
-        <input type="password" id="reg-password" placeholder="min 6 characters">
-      </div>
+      <div class="form-group"><label>Your name</label><input type="text" id="reg-name" placeholder="Shreya Kapoor"></div>
+      <div class="form-group"><label>Email</label><input type="email" id="reg-email" placeholder="you@email.com"></div>
+      <div class="form-group"><label>Password</label><input type="password" id="reg-password" placeholder="min 6 characters"></div>
       <button class="btn-primary" id="btn-register" onclick="doRegister()">Create account</button>
       <div class="auth-switch">Already have an account? <a onclick="showScreen('screen-login')">Sign in</a></div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- SCREEN: CONNECT PLATFORMS -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══════════════ CONNECT PLATFORMS ═══════════════ -->
 <div class="screen" id="screen-connect">
   <div class="connect-wrap">
     <div class="connect-box">
@@ -406,90 +403,230 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         </div>
         <span style="font-size:16px;font-weight:700;">SocialDesk</span>
       </div>
-
       <!-- Steps -->
-      <div style="display:flex;align-items:center;justify-content:center;margin-bottom:2rem;">
-        <div class="step-item">
-          <div class="step-circle done">✓</div>
-          <div class="step-label">Account</div>
-        </div>
-        <div class="step-line done-line" style="flex:1;height:2px;margin-bottom:16px;"></div>
-        <div class="step-item">
-          <div class="step-circle active" id="step2circle">2</div>
-          <div class="step-label">Connect</div>
-        </div>
-        <div class="step-line" id="step-line-3" style="flex:1;height:2px;margin-bottom:16px;"></div>
-        <div class="step-item">
-          <div class="step-circle todo" id="step3circle">3</div>
-          <div class="step-label">Dashboard</div>
-        </div>
+      <div class="steps-bar">
+        <div class="step-item"><div class="step-circle done">✓</div><div class="step-label">Account</div></div>
+        <div class="step-line done-line"></div>
+        <div class="step-item"><div class="step-circle active">2</div><div class="step-label">Connect</div></div>
+        <div class="step-line"></div>
+        <div class="step-item"><div class="step-circle todo">3</div><div class="step-label">Profile</div></div>
+        <div class="step-line"></div>
+        <div class="step-item"><div class="step-circle todo">4</div><div class="step-label">Dashboard</div></div>
       </div>
-
       <div class="connect-header">
         <h2>Connect your accounts</h2>
         <p>Connect the platforms you want to manage. You can always add more later from settings.</p>
       </div>
-
       <!-- Facebook -->
       <div class="platform-card" id="pcard-facebook">
         <div class="platform-left">
-          <div class="plat-icon fb">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-          </div>
-          <div>
-            <div class="plat-name">Facebook</div>
-            <div class="plat-desc">Post on your Facebook Page</div>
-          </div>
+          <div class="plat-icon fb"><svg viewBox="0 0 24 24"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></div>
+          <div><div class="plat-name">Facebook</div><div class="plat-desc">Post on your Facebook Page</div></div>
         </div>
         <button class="btn-connect" id="cbtn-facebook" onclick="openOAuth('facebook')">
-          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Connect
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Connect
         </button>
       </div>
-
       <!-- Instagram -->
       <div class="platform-card" id="pcard-instagram">
         <div class="platform-left">
-          <div class="plat-icon ig">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
-          </div>
-          <div>
-            <div class="plat-name">Instagram</div>
-            <div class="plat-desc">Requires Business account + Facebook Page</div>
-          </div>
+          <div class="plat-icon ig"><svg viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg></div>
+          <div><div class="plat-name">Instagram</div><div class="plat-desc">Requires Business account + Facebook Page</div></div>
         </div>
         <button class="btn-connect" id="cbtn-instagram" onclick="openOAuth('instagram')">
-          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Connect
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Connect
         </button>
       </div>
-
       <!-- LinkedIn -->
       <div class="platform-card" id="pcard-linkedin">
         <div class="platform-left">
-          <div class="plat-icon li">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-          </div>
-          <div>
-            <div class="plat-name">LinkedIn</div>
-            <div class="plat-desc">Post on your LinkedIn profile or company page</div>
-          </div>
+          <div class="plat-icon li"><svg viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></div>
+          <div><div class="plat-name">LinkedIn</div><div class="plat-desc">Post on your LinkedIn profile or company page</div></div>
         </div>
         <button class="btn-connect" id="cbtn-linkedin" onclick="openOAuth('linkedin')">
-          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-          Connect
+          <svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Connect
         </button>
       </div>
+      <button class="btn-continue" onclick="goToQuestionnaire()">Continue →</button>
+      <button class="btn-skip" onclick="goToQuestionnaire()">Skip for now</button>
+    </div>
+  </div>
+</div>
 
-      <button class="btn-continue" onclick="goDashboard()">Go to dashboard →</button>
+<!-- ═══════════════ QUESTIONNAIRE ═══════════════ -->
+<div class="screen" id="screen-questionnaire">
+  <div class="quest-wrap">
+    <div class="quest-box">
+      <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:2rem;">
+        <div class="auth-icon" style="width:36px;height:36px;border-radius:9px;display:inline-flex;">
+          <svg viewBox="0 0 24 24" style="width:18px;height:18px;"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </div>
+        <span style="font-size:16px;font-weight:700;">SocialDesk</span>
+      </div>
+      <!-- Steps -->
+      <div class="steps-bar">
+        <div class="step-item"><div class="step-circle done">✓</div><div class="step-label">Account</div></div>
+        <div class="step-line done-line"></div>
+        <div class="step-item"><div class="step-circle done">✓</div><div class="step-label">Connect</div></div>
+        <div class="step-line done-line"></div>
+        <div class="step-item"><div class="step-circle active">3</div><div class="step-label">Profile</div></div>
+        <div class="step-line"></div>
+        <div class="step-item"><div class="step-circle todo">4</div><div class="step-label">Dashboard</div></div>
+      </div>
+      <div class="quest-header">
+        <h2>Tell us about yourself</h2>
+        <p>This helps our AI write posts that match your voice and goals.</p>
+      </div>
+
+      <div class="quest-ai-hint">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Your answers are used by our AI to generate relevant, on-brand posts automatically — no prompting needed.
+      </div>
+
+      <!-- Who are you -->
+      <div class="quest-card">
+        <h3><span>👤</span> Who best describes you?</h3>
+        <div class="option-grid">
+          <button class="option-btn" onclick="selectOption(this,'persona','influencer')">
+            <span class="opt-icon">🎥</span>
+            <span class="opt-label">Influencer / Creator</span>
+            <span class="opt-desc">Content, lifestyle, vlogs</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'persona','hr')">
+            <span class="opt-icon">👥</span>
+            <span class="opt-label">HR Professional</span>
+            <span class="opt-desc">Recruitment, culture</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'persona','founder')">
+            <span class="opt-icon">🚀</span>
+            <span class="opt-label">Founder / CEO</span>
+            <span class="opt-desc">Startup, business</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'persona','marketer')">
+            <span class="opt-icon">📣</span>
+            <span class="opt-label">Marketer</span>
+            <span class="opt-desc">Campaigns, growth</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'persona','employee')">
+            <span class="opt-icon">💼</span>
+            <span class="opt-label">Professional</span>
+            <span class="opt-desc">Working at a company</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'persona','freelancer')">
+            <span class="opt-icon">🧑‍💻</span>
+            <span class="opt-label">Freelancer</span>
+            <span class="opt-desc">Independent, consulting</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Industry -->
+      <div class="quest-card">
+        <h3><span>🏢</span> What's your industry?</h3>
+        <div class="option-grid cols-3">
+          <button class="option-btn" onclick="selectOption(this,'industry','tech')"><span class="opt-icon">💻</span><span class="opt-label">Tech</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','fashion')"><span class="opt-icon">👗</span><span class="opt-label">Fashion</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','food')"><span class="opt-icon">🍽️</span><span class="opt-label">Food</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','finance')"><span class="opt-icon">💰</span><span class="opt-label">Finance</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','health')"><span class="opt-icon">🏥</span><span class="opt-label">Health</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','education')"><span class="opt-icon">📚</span><span class="opt-label">Education</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','marketing')"><span class="opt-icon">📊</span><span class="opt-label">Marketing</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','retail')"><span class="opt-icon">🛍️</span><span class="opt-label">Retail</span></button>
+          <button class="option-btn" onclick="selectOption(this,'industry','other')"><span class="opt-icon">🌐</span><span class="opt-label">Other</span></button>
+        </div>
+      </div>
+
+      <!-- Brand name -->
+      <div class="quest-card">
+        <h3><span>✨</span> What's your brand or name?</h3>
+        <input class="quest-input" id="q-brand-name" placeholder="e.g. ShilshaTech, Shreya Singh, My Store..." oninput="questData.brand_name=this.value">
+      </div>
+
+      <!-- Tone -->
+      <div class="quest-card">
+        <h3><span>🎙️</span> How should your posts sound?</h3>
+        <div class="option-grid">
+          <button class="option-btn" onclick="selectOption(this,'tone','professional')">
+            <span class="opt-icon">🤝</span>
+            <span class="opt-label">Professional</span>
+            <span class="opt-desc">Formal, authoritative</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'tone','casual')">
+            <span class="opt-icon">😊</span>
+            <span class="opt-label">Casual & Friendly</span>
+            <span class="opt-desc">Warm, approachable</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'tone','inspirational')">
+            <span class="opt-icon">🌟</span>
+            <span class="opt-label">Inspirational</span>
+            <span class="opt-desc">Motivating, uplifting</span>
+          </button>
+          <button class="option-btn" onclick="selectOption(this,'tone','witty')">
+            <span class="opt-icon">😄</span>
+            <span class="opt-label">Witty & Humorous</span>
+            <span class="opt-desc">Playful, entertaining</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Audience -->
+      <div class="quest-card">
+        <h3><span>🎯</span> Who is your target audience?</h3>
+        <div class="option-grid">
+          <button class="option-btn" onclick="selectOption(this,'audience','professionals')"><span class="opt-label">Working Professionals</span></button>
+          <button class="option-btn" onclick="selectOption(this,'audience','students')"><span class="opt-label">Students</span></button>
+          <button class="option-btn" onclick="selectOption(this,'audience','job seekers')"><span class="opt-label">Job Seekers</span></button>
+          <button class="option-btn" onclick="selectOption(this,'audience','entrepreneurs')"><span class="opt-label">Entrepreneurs</span></button>
+          <button class="option-btn" onclick="selectOption(this,'audience','consumers')"><span class="opt-label">General Consumers</span></button>
+          <button class="option-btn" onclick="selectOption(this,'audience','b2b')"><span class="opt-label">B2B / Businesses</span></button>
+        </div>
+      </div>
+
+      <!-- Country + Language -->
+      <div class="quest-card">
+        <h3><span>🌍</span> Where are you based?</h3>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Country</div>
+            <select class="quest-select" id="q-country" onchange="questData.country_code=this.value">
+              <option value="IN">🇮🇳 India</option>
+              <option value="US">🇺🇸 United States</option>
+              <option value="GB">🇬🇧 United Kingdom</option>
+              <option value="AU">🇦🇺 Australia</option>
+              <option value="CA">🇨🇦 Canada</option>
+              <option value="SG">🇸🇬 Singapore</option>
+              <option value="AE">🇦🇪 UAE</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;">Language</div>
+            <select class="quest-select" id="q-language" onchange="questData.language=this.value">
+              <option value="english">English</option>
+              <option value="hindi">Hindi</option>
+              <option value="hinglish">Hinglish</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Posts per week -->
+      <div class="quest-card">
+        <h3><span>📅</span> How many AI posts per week?</h3>
+        <div class="range-row">
+          <input type="range" min="1" max="7" value="3" id="q-ppw" oninput="document.getElementById('ppw-val').textContent=this.value;questData.posts_per_week=parseInt(this.value)">
+          <span class="range-val" id="ppw-val">3</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);margin-top:6px;">AI will generate this many posts each week for your approval.</div>
+      </div>
+
+      <div class="error-alert" id="quest-error"></div>
+      <button class="btn-continue" id="btn-save-profile" onclick="saveProfile()">Save & go to dashboard →</button>
       <button class="btn-skip" onclick="goDashboard()">Skip for now</button>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- SCREEN: LOADING -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══════════════ LOADING ═══════════════ -->
 <div class="screen" id="screen-loading">
   <div class="loading-wrap">
     <div class="spinner"></div>
@@ -498,15 +635,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- SCREEN: DASHBOARD -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══════════════ DASHBOARD ═══════════════ -->
 <div class="screen" id="screen-dashboard">
   <div class="topbar">
     <div class="topbar-brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-      </div>
+      <div class="brand-icon"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
       SocialDesk
     </div>
     <div class="topbar-right">
@@ -515,7 +648,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <button class="avatar-btn" id="avatar-btn" onclick="toggleAvatarMenu()"></button>
         <div class="avatar-menu" id="avatar-menu">
           <button class="avatar-menu-item" onclick="showScreen('screen-connect');closeAvatarMenu()">Manage connections</button>
-          <button class="avatar-menu-item" onclick="showAccountInfo()">Account info</button>
+          <button class="avatar-menu-item" onclick="showProfileModal();closeAvatarMenu()">AI Profile</button>
+          <button class="avatar-menu-item" onclick="showAccountInfo();closeAvatarMenu()">Account info</button>
+          <div class="avatar-menu-divider"></div>
           <button class="avatar-menu-item danger" onclick="doLogout()">Sign out</button>
         </div>
       </div>
@@ -523,9 +658,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   </div>
 
   <div class="dash-body">
+    <!-- Header + AI generate button -->
     <div class="page-header">
-      <h2 id="dash-greeting">Good morning!</h2>
-      <p id="dash-subtext">Here's what's happening with your posts today.</p>
+      <div class="page-header-left">
+        <h2 id="dash-greeting">Good morning!</h2>
+        <p id="dash-subtext">Here's what's happening with your posts today.</p>
+      </div>
+      <button class="btn-ai-generate" id="btn-ai-gen" onclick="triggerAIGeneration()">
+        <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        <span id="ai-gen-label">Generate AI posts</span>
+      </button>
     </div>
 
     <!-- Metrics -->
@@ -552,7 +694,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       </div>
     </div>
 
-    <!-- Pending Approvals section -->
+    <!-- AI Suggestions -->
+    <div class="card" id="ai-section" style="border-color: var(--ai-border); display:none;">
+      <div class="card-title" style="color:var(--ai-text);">
+        <svg viewBox="0 0 24 24" style="opacity:1;stroke:var(--ai-text);"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        AI suggested posts <span class="count-badge ai" id="ai-count">0</span>
+      </div>
+      <div id="ai-list">
+        <div class="ai-empty"><div class="ai-empty-icon">✨</div>No AI suggestions yet. Click "Generate AI posts" to get started.</div>
+      </div>
+    </div>
+
+    <!-- Manual Approvals -->
     <div class="card" id="approval-section" style="border-color: rgba(146,85,13,0.35); display:none;">
       <div class="card-title">
         <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -567,85 +720,46 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Compose post
       </div>
-      <textarea class="compose-textarea" id="post-text" placeholder="Write your post here... 💡 Tip: Include hashtags and a call to action for better engagement." oninput="updateCharCount()"></textarea>
+      <textarea class="compose-textarea" id="post-text" placeholder="Write your post here..." oninput="updateCharCount()"></textarea>
       <div class="char-count" id="char-count-el">0 / 2200 characters</div>
-      <!-- ── MEDIA UPLOAD ROW ── -->
-      <div id="media-row" style="display:none; margin-top:10px; flex-direction:column; gap:8px;">
-        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">
-          Image / Video <span style="color:var(--danger-text);">*</span>
-          <span style="font-weight:400;text-transform:none;letter-spacing:0;"> — optional; will be used by selected platforms</span>
-        </div>
 
-        <!-- Tab toggle: Upload vs URL -->
+      <!-- Media Upload -->
+      <div id="media-row" style="display:none;margin-top:10px;flex-direction:column;gap:8px;">
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Image <span style="color:var(--danger-text);">*</span> <span style="font-weight:400;text-transform:none;letter-spacing:0;">— optional</span></div>
         <div style="display:flex;gap:6px;">
-          <button type="button" id="media-tab-upload" onclick="switchMediaTab('upload')"
-            style="font-size:12px;padding:5px 14px;border-radius:7px;border:1px solid var(--text);background:var(--text);color:#fff;cursor:pointer;font-family:inherit;font-weight:500;">
-            📁 Upload file
-          </button>
-          <button type="button" id="media-tab-url" onclick="switchMediaTab('url')"
-            style="font-size:12px;padding:5px 14px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-family:inherit;font-weight:500;">
-            🔗 Paste URL
-          </button>
+          <button type="button" id="media-tab-upload" onclick="switchMediaTab('upload')" style="font-size:12px;padding:5px 14px;border-radius:7px;border:1px solid var(--text);background:var(--text);color:#fff;cursor:pointer;font-family:inherit;font-weight:500;">📁 Upload file</button>
+          <button type="button" id="media-tab-url" onclick="switchMediaTab('url')" style="font-size:12px;padding:5px 14px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-family:inherit;font-weight:500;">🔗 Paste URL</button>
         </div>
-
-        <!-- Upload panel -->
         <div id="media-panel-upload">
-          <div id="media-dropzone"
-            onclick="document.getElementById('media-file-input').click()"
-            ondragover="event.preventDefault();this.style.borderColor='var(--text)'"
-            ondragleave="this.style.borderColor='var(--border-strong)'"
-            ondrop="handleMediaDrop(event)"
-            style="border:2px dashed var(--border-strong);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:border-color 0.15s;background:#fafaf8;">
+          <div id="media-dropzone" onclick="document.getElementById('media-file-input').click()" ondragover="event.preventDefault()" ondrop="handleMediaDrop(event)" style="border:2px dashed var(--border-strong);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:#fafaf8;">
             <div style="font-size:24px;margin-bottom:6px;">🖼️</div>
             <div style="font-size:13px;color:var(--text-muted);">Click to upload or drag & drop</div>
             <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">JPEG, PNG — max 8MB</div>
           </div>
-          <input type="file" id="media-file-input" accept="image/jpeg,image/png,image/jpg"
-            style="display:none;" onchange="handleMediaFileSelect(event)">
-
-          <!-- Upload progress -->
+          <input type="file" id="media-file-input" accept="image/jpeg,image/png,image/jpg" style="display:none;" onchange="handleMediaFileSelect(event)">
           <div id="media-upload-progress" style="display:none;margin-top:8px;">
             <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);">
               <div class="spinner" style="width:16px;height:16px;border-width:2px;"></div>
               <span id="media-upload-status">Uploading...</span>
             </div>
-            <div style="height:4px;background:var(--border);border-radius:4px;margin-top:6px;">
-              <div id="media-progress-bar" style="height:100%;background:var(--text);border-radius:4px;width:0%;transition:width 0.3s;"></div>
-            </div>
           </div>
-
-          <!-- Preview -->
           <div id="media-preview" style="display:none;margin-top:8px;position:relative;display:inline-block;">
-            <img id="media-preview-img" src="" alt="preview"
-              style="max-height:120px;max-width:100%;border-radius:var(--radius);border:1px solid var(--border);">
-            <button type="button" onclick="clearMedia()"
-              style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--danger-text);color:#fff;border:none;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;font-family:inherit;">✕</button>
+            <img id="media-preview-img" src="" alt="preview" style="max-height:120px;max-width:100%;border-radius:var(--radius);border:1px solid var(--border);">
+            <button type="button" onclick="clearMedia()" style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--danger-text);color:#fff;border:none;cursor:pointer;font-size:12px;">✕</button>
           </div>
         </div>
-
-        <!-- URL panel -->
         <div id="media-panel-url" style="display:none;">
-          <input
-            type="url"
-            id="ig-image-url"
-            placeholder="https://example.com/image.jpg (JPEG or PNG only)"
-            class="compose-select"
-            style="width:100%;"
-            oninput="handleUrlInput(this.value)"
-          >
+          <input type="url" id="ig-image-url" placeholder="https://example.com/image.jpg" class="compose-select" style="width:100%;" oninput="handleUrlInput(this.value)">
           <div id="url-preview" style="display:none;margin-top:8px;">
-            <img id="url-preview-img" src="" alt="preview"
-              style="max-height:120px;border-radius:var(--radius);border:1px solid var(--border);"
-              onerror="document.getElementById('url-preview').style.display='none'">
+            <img id="url-preview-img" src="" alt="preview" style="max-height:120px;border-radius:var(--radius);border:1px solid var(--border);" onerror="document.getElementById('url-preview').style.display='none'">
           </div>
         </div>
-
-        <!-- Final resolved URL (hidden) -->
         <input type="hidden" id="media-final-url" value="">
       </div>
+
       <div class="compose-row">
         <div class="plat-toggles">
-          <label class="plat-toggle-label"><input type="checkbox" id="chk-fb" checked> 
+          <label class="plat-toggle-label"><input type="checkbox" id="chk-fb" checked>
             <svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:#1877f2;"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
             Facebook
           </label>
@@ -674,7 +788,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       </div>
     </div>
 
-    <!-- Two column: Platform status + Upcoming posts -->
+    <!-- Platform + Upcoming -->
     <div class="grid-2">
       <div class="card">
         <div class="card-title">
@@ -682,64 +796,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
           Platform status
         </div>
         <div class="plat-status-row">
-          <div class="plat-row-left">
-            <div class="status-dot" id="sdot-fb"></div>
-            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#1877f2;"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
-            Facebook
-          </div>
+          <div class="plat-row-left"><div class="status-dot" id="sdot-fb"></div><svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#1877f2;"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>Facebook</div>
           <span class="badge" id="sbadge-fb">—</span>
         </div>
         <div class="plat-status-row">
-          <div class="plat-row-left">
-            <div class="status-dot" id="sdot-ig"></div>
-            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#c13584;"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>
-            Instagram
-          </div>
+          <div class="plat-row-left"><div class="status-dot" id="sdot-ig"></div><svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#c13584;"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/></svg>Instagram</div>
           <span class="badge" id="sbadge-ig">—</span>
         </div>
         <div class="plat-status-row">
-          <div class="plat-row-left">
-            <div class="status-dot" id="sdot-li"></div>
-            <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#0a66c2;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
-            LinkedIn
-          </div>
+          <div class="plat-row-left"><div class="status-dot" id="sdot-li"></div><svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#0a66c2;"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>LinkedIn</div>
           <span class="badge" id="sbadge-li">—</span>
         </div>
-        <button class="btn-manage-conn" style="margin-top:14px;width:100%;padding:9px;" onclick="showScreen('screen-connect')">
-          Manage connections
-        </button>
+        <button class="btn-manage-conn" style="margin-top:14px;width:100%;padding:9px;" onclick="showScreen('screen-connect')">Manage connections</button>
       </div>
-
       <div class="card">
         <div class="card-title">
           <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
           Upcoming posts
         </div>
-        <div id="upcoming-list">
-          <div class="empty-state">
-            <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-            No upcoming posts scheduled yet
-          </div>
-        </div>
+        <div id="upcoming-list"><div class="empty-state"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>No upcoming posts</div></div>
       </div>
     </div>
 
     <!-- Calendar -->
     <div class="card">
       <div class="cal-nav">
-        <button class="cal-nav-btn" onclick="shiftMonth(-1)">
-          <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
-        </button>
+        <button class="cal-nav-btn" onclick="shiftMonth(-1)"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
         <span class="cal-month-label" id="cal-title"></span>
-        <button class="cal-nav-btn" onclick="shiftMonth(1)">
-          <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
+        <button class="cal-nav-btn" onclick="shiftMonth(1)"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
       </div>
       <div class="cal-legend">
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--info-text)"></div> Scheduled</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--success-text)"></div> Published</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--warning-text)"></div> Pending</div>
-        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--danger-text)"></div> Failed</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--info-text)"></div>Scheduled</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--success-text)"></div>Published</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--warning-text)"></div>Pending</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--ai-text)"></div>AI Suggested</div>
+        <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--danger-text)"></div>Failed</div>
       </div>
       <div class="cal-grid-wrap">
         <div class="cal-grid" id="cal-headers"></div>
@@ -762,40 +853,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <button class="tab" onclick="filterLog('failed',this)">Failed</button>
         <button class="tab" onclick="filterLog('cancelled',this)">Cancelled</button>
       </div>
-      <div id="activity-list">
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          No activity yet. Schedule your first post above.
-        </div>
-      </div>
+      <div id="activity-list"><div class="empty-state"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>No activity yet.</div></div>
     </div>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- OAUTH MOCK POPUP -->
-<!-- ═══════════════════════════════════════════ -->
-<div class="oauth-overlay" id="oauth-overlay">
-  <div class="oauth-popup">
-    <div class="plat-big-icon" id="oauth-icon"></div>
-    <h3 id="oauth-title">Connect Facebook</h3>
-    <p id="oauth-desc">SocialDesk is requesting permission to manage your Facebook Page.</p>
-    <div class="oauth-permissions">
-      <p>Permissions requested</p>
-      <div id="oauth-perms"></div>
-    </div>
-    <button class="oauth-btn-allow" id="oauth-allow-btn" onclick="confirmOAuth()">Allow access</button>
-    <button class="oauth-btn-cancel" onclick="cancelOAuth()">Cancel</button>
-  </div>
-</div>
-
-<!-- ═══════════════════════════════════════════ -->
-<!-- REJECT/CANCEL MODAL -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══════════════ REJECT MODAL ═══════════════ -->
 <div class="modal-overlay" id="reject-modal">
   <div class="modal-box">
     <h3>Cancel this post?</h3>
-    <p>This action will mark the post as cancelled. You can create a new post anytime.</p>
+    <p>This will mark the post as cancelled.</p>
     <div class="form-group">
       <label>Reason (optional)</label>
       <select class="modal-select" id="reject-reason">
@@ -813,245 +880,120 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════ -->
-<!-- ACCOUNT INFO MODAL -->
-<!-- ═══════════════════════════════════════════ -->
+<!-- ═══════════════ ACCOUNT MODAL ═══════════════ -->
 <div class="modal-overlay" id="account-modal">
   <div class="modal-box">
     <h3>Account info</h3>
     <p id="account-modal-body" style="margin-bottom:0;"></p>
-    <div class="modal-btns">
-      <button class="btn-secondary" onclick="document.getElementById('account-modal').classList.remove('open')">Close</button>
-    </div>
+    <div class="modal-btns"><button class="btn-secondary" onclick="document.getElementById('account-modal').classList.remove('open')">Close</button></div>
+  </div>
+</div>
+
+<!-- ═══════════════ PROFILE MODAL ═══════════════ -->
+<div class="modal-overlay" id="profile-modal">
+  <div class="modal-box">
+    <h3>AI Profile</h3>
+    <p>Your profile drives AI post generation. <a onclick="document.getElementById('profile-modal').classList.remove('open');showScreen('screen-questionnaire')" style="color:var(--ai-text);cursor:pointer;font-weight:600;">Edit profile →</a></p>
+    <div id="profile-modal-body"></div>
+    <div class="modal-btns"><button class="btn-secondary" onclick="document.getElementById('profile-modal').classList.remove('open')">Close</button></div>
   </div>
 </div>
 
 <div id="toast"></div>
 
 <script>
-// ═══════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════
 const API_BASE = 'http://localhost:8001';
 
 let state = {
-  user: null,          // { email, name, initials }
-  token: null,
+  user: null, token: null,
   platforms: { facebook: false, instagram: false, linkedin: false },
-  posts: [],           // array of post objects
-  nextId: 1,
-  calYear: new Date().getFullYear(),
-  calMonth: new Date().getMonth(),
-  logFilter: 'all',
-  rejectPostId: null,
-  oauthPlatform: null,
+  posts: [], nextId: 1,
+  calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
+  logFilter: 'all', rejectPostId: null,
+  userProfile: null
 };
 
-// Persist to sessionStorage so page refresh doesn't lose demo data
-function saveState() {
-  try { sessionStorage.setItem('sd_demo', JSON.stringify(state)); } catch(e) {}
-}
+// Questionnaire data
+let questData = {
+  persona: '', industry: '', brand_name: '',
+  tone: '', audience: '', country_code: 'IN',
+  language: 'english', posts_per_week: 3
+};
+
+function saveState() { try { sessionStorage.setItem('sd_state', JSON.stringify(state)); } catch(e) {} }
 function loadState() {
-  try {
-    const d = sessionStorage.getItem('sd_demo');
-    if (d) { const s = JSON.parse(d); Object.assign(state, s); return true; }
-  } catch(e) {}
+  try { const d = sessionStorage.getItem('sd_state'); if (d) { Object.assign(state, JSON.parse(d)); return true; } } catch(e) {}
   return false;
 }
-
-function getAuthHeaders() {
-  const headers = {};
-  if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
-  return headers;
-}
+function getAuthHeaders() { return state.token ? { 'Authorization': `Bearer ${state.token}` } : {}; }
 
 async function apiRequest(path, options = {}) {
-  const url = `${API_BASE}${path}`;
-  const headers = {
-    ...getAuthHeaders(),
-    ...options.headers,
-  };
-
+  const headers = { ...getAuthHeaders(), ...options.headers };
   const opts = { ...options, headers };
   if (opts.body && !(opts.body instanceof FormData) && typeof opts.body !== 'string') {
     opts.body = JSON.stringify(opts.body);
     opts.headers['Content-Type'] = 'application/json';
   }
-
-  if (opts.body instanceof FormData) {
-    delete opts.headers['Content-Type'];
-  }
-
-  const res = await fetch(url, opts);
-  const contentType = res.headers.get('content-type') || '';
-  const data = contentType.includes('application/json') ? await res.json() : null;
-
-  if (!res.ok) {
-    const err = data?.detail || data?.message || res.statusText || 'API request failed';
-    throw new Error(err);
-  }
-
+  if (opts.body instanceof FormData) delete opts.headers['Content-Type'];
+  const res = await fetch(`${API_BASE}${path}`, opts);
+  const ct = res.headers.get('content-type') || '';
+  const data = ct.includes('application/json') ? await res.json() : null;
+  if (!res.ok) throw new Error(data?.detail || data?.message || res.statusText);
   return data;
 }
+async function apiPost(path, body) { return apiRequest(path, { method: 'POST', body }); }
+async function apiGet(path) { return apiRequest(path, { method: 'GET' }); }
 
-async function apiPost(path, body) {
-  return apiRequest(path, { method: 'POST', body });
-}
-
-async function apiGet(path) {
-  return apiRequest(path, { method: 'GET' });
-}
-
-function setUserFromBackend(data) {
-  const name = data.name || data.email?.split('@')[0] || 'User';
-  state.user = { email: data.email, name, initials: getInitials(name) };
-  saveState();
-}
-
-async function fetchCurrentUser() {
-  const data = await apiGet('/auth/me');
-  setUserFromBackend(data);
-  return data;
-}
-
-
-async function refreshPlatformStatusFromBackend() {
-  if (!state.token) return;
-  try {
-    const status = await apiGet('/platforms/status');
-    state.platforms.facebook  = status.facebook  === 'connected';
-    state.platforms.instagram = status.instagram === 'connected';
-    state.platforms.linkedin  = status.linkedin  === 'connected';
-    saveState();
-    updateConnectScreen();
-    updatePlatformStatus();
-  } catch (error) {
-    console.warn('Platform status error', error);
-  }
-}
-
-
-
-function handleApiError(err, el) {
-  const message = err?.message || 'Something went wrong. Please try again.';
-  if (el) {
-    el.textContent = message;
-    el.style.display = 'block';
-  } else {
-    toast(message);
-  }
-}
-
-// ═══════════════════════════════════════════
-// PLATFORM CONFIG
-// ═══════════════════════════════════════════
-const PLAT_CONFIG = {
-  facebook: {
-    name: 'Facebook',
-    color: '#1877f2',
-    bgColor: '#e8f2ff',
-    permissions: ['Manage your Facebook Pages', 'Create and publish posts', 'Read page analytics'],
-    iconSvg: '<path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>'
-  },
-  instagram: {
-    name: 'Instagram',
-    color: '#c13584',
-    bgColor: '#fce8f4',
-    permissions: ['Connect via Facebook Business', 'Publish to Instagram Business account', 'Read insights'],
-    iconSvg: '<path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 1 0 0 12.324 6.162 6.162 0 0 0 0-12.324zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm6.406-11.845a1.44 1.44 0 1 0 0 2.881 1.44 1.44 0 0 0 0-2.881z"/>'
-  },
-  linkedin: {
-    name: 'LinkedIn',
-    color: '#0a66c2',
-    bgColor: '#e8f2fd',
-    permissions: ['Post on your behalf', 'Access your profile info', 'Manage company page posts'],
-    iconSvg: '<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 0 1-2.063-2.065 2.064 2.064 0 1 1 2.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>'
-  }
-};
-
-// ═══════════════════════════════════════════
-// UTILS
-// ═══════════════════════════════════════════
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   window.scrollTo(0, 0);
 }
-
 function showLoading(msg, sub='') {
   document.getElementById('loading-msg').textContent = msg;
   document.getElementById('loading-sub').textContent = sub;
   showScreen('screen-loading');
 }
-
-function toast(msg, duration=3000) {
+function toast(msg, duration=3500) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(window._toastTimer);
   window._toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
-
 function fmtDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', { month:'short', day:'numeric', year:'numeric' }) +
-    ' at ' + d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleDateString('en-IN', { month:'short', day:'numeric', year:'numeric' }) + ' at ' + d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
 }
-
 function fmtShort(iso) {
   if (!iso) return '';
   const d = new Date(iso);
-  return d.toLocaleDateString('en-IN', { month:'short', day:'numeric' }) + ' ' +
-    d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
+  return d.toLocaleDateString('en-IN', { month:'short', day:'numeric' }) + ' ' + d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' });
 }
+function getInitials(name) { return name ? name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2) : '?'; }
+function greetingText() { const h=new Date().getHours(); return h<12?'Good morning':h<17?'Good afternoon':'Good evening'; }
+function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function getInitials(name) {
-  if (!name) return '?';
-  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2);
-}
-
-function greetingText() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
-}
-
-// ═══════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════
+// ═══ AUTH ═══
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const pass = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
-  if (!email || !pass) {
-    errEl.textContent = 'Please fill in both fields.';
-    errEl.style.display = 'block'; return;
-  }
-  if (pass.length < 4) {
-    errEl.textContent = 'Password must be at least 4 characters.';
-    errEl.style.display = 'block'; return;
-  }
-
+  if (!email || !pass) { errEl.textContent='Please fill in both fields.'; errEl.style.display='block'; return; }
   const btn = document.getElementById('btn-login');
-  btn.disabled = true;
-  document.getElementById('login-label').textContent = 'Signing in...';
-
+  btn.disabled = true; document.getElementById('login-label').textContent = 'Signing in...';
   try {
-    const response = await apiPost('/auth/login', { email, password: pass });
-    state.token = response.access_token;
-    setUserFromBackend({ email: response.email || email, name: response.name || email.split('@')[0] });
+    const res = await apiPost('/auth/login', { email, password: pass });
+    state.token = res.access_token;
+    state.user = { email: res.email || email, name: email.split('@')[0], initials: getInitials(email.split('@')[0]) };
     saveState();
-    await refreshPlatformStatusFromBackend();
+    await refreshPlatformStatus();
+    await loadUserProfile();
     goDashboard();
-  } catch (error) {
-    handleApiError(error, errEl);
-  } finally {
-    btn.disabled = false;
-    document.getElementById('login-label').textContent = 'Sign in';
-  }
+  } catch(e) { errEl.textContent = e.message; errEl.style.display='block'; }
+  finally { btn.disabled=false; document.getElementById('login-label').textContent='Sign in'; }
 }
 
 async function doRegister() {
@@ -1060,234 +1002,275 @@ async function doRegister() {
   const pass = document.getElementById('reg-password').value;
   const errEl = document.getElementById('reg-error');
   errEl.style.display = 'none';
-  if (!name || !email || !pass) {
-    errEl.textContent = 'Please fill in all fields.'; errEl.style.display = 'block'; return;
-  }
-  if (pass.length < 6) {
-    errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return;
-  }
-
+  if (!name||!email||!pass) { errEl.textContent='Please fill in all fields.'; errEl.style.display='block'; return; }
+  if (pass.length<6) { errEl.textContent='Password must be at least 6 characters.'; errEl.style.display='block'; return; }
   const btn = document.getElementById('btn-register');
-  if (btn) btn.disabled = true;
-
+  btn.disabled = true;
   try {
-    const response = await apiPost('/auth/register', { email, password: pass, timezone: 'UTC' });
-    state.token = response.access_token;
-    state.user = { email: response.email || email, name, initials: getInitials(name) };
+    const res = await apiPost('/auth/register', { email, password: pass, timezone: 'UTC' });
+    state.token = res.access_token;
+    state.user = { email: res.email||email, name, initials: getInitials(name) };
     saveState();
-    await refreshPlatformStatusFromBackend();
+    await refreshPlatformStatus();
     showScreen('screen-connect');
-    toast('Account created! Now connect your platforms.');
-  } catch (error) {
-    handleApiError(error, errEl);
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+    toast('Account created! Connect your platforms.');
+  } catch(e) { errEl.textContent=e.message; errEl.style.display='block'; }
+  finally { btn.disabled=false; }
 }
 
 function quickDemo() {
   state.user = { email: 'shreya@gmail.com', name: 'Shreya', initials: 'SK' };
-  // Seed some demo data
   state.platforms = { facebook: true, instagram: false, linkedin: true };
   const now = new Date();
   state.posts = [
-    { id: 1, content: '🚀 Excited to announce our new product launch! Stay tuned for the big reveal next week. #Innovation #ProductLaunch', platforms: ['facebook','linkedin'], status: 'posted', scheduledAt: new Date(now.getTime()-86400000*2).toISOString(), recurrence: 'ONE_TIME' },
-    { id: 2, content: 'Monday motivation: "The only way to do great work is to love what you do." – Steve Jobs #MondayMotivation #Inspiration', platforms: ['facebook','linkedin'], status: 'scheduled', scheduledAt: new Date(now.getTime()+86400000*1).toISOString(), recurrence: 'WEEKLY' },
-    { id: 3, content: '📊 Our Q2 results are in and we are proud to share some exciting growth numbers with our community. Read the full report on our website.', platforms: ['linkedin'], status: 'awaiting_approval', scheduledAt: new Date(now.getTime()+86400000*3).toISOString(), recurrence: 'ONE_TIME' },
-    { id: 4, content: 'Check out our latest blog post about 5 productivity tips that will transform your workday! Link in bio 👆 #Productivity #Tips', platforms: ['facebook','instagram'], status: 'awaiting_approval', scheduledAt: new Date(now.getTime()+86400000*5).toISOString(), recurrence: 'ONE_TIME' },
-    { id: 5, content: 'Happy Friday everyone! 🎉 What are your plans for the weekend?', platforms: ['facebook'], status: 'failed', scheduledAt: new Date(now.getTime()-86400000*4).toISOString(), recurrence: 'ONE_TIME' },
+    { id:1, content:'🚀 Excited to announce our new product launch!', platforms:['facebook','linkedin'], status:'posted', scheduledAt:new Date(now-86400000*2).toISOString(), recurrence:'ONE_TIME' },
+    { id:2, content:'Monday motivation: The only way to do great work is to love what you do.', platforms:['facebook','linkedin'], status:'scheduled', scheduledAt:new Date(now+86400000).toISOString(), recurrence:'WEEKLY' },
+    { id:3, content:'AI-generated: Celebrating International Women\'s Day with our incredible team!', platforms:['linkedin'], status:'awaiting_approval', scheduledAt:new Date(now+86400000*3).toISOString(), recurrence:'ONE_TIME', ai_generated:true, trigger_type:'event', trigger_name:"International Women's Day" },
   ];
-  state.nextId = 6;
+  state.nextId = 4;
+  state.userProfile = { persona:'founder', industry:'tech', brand_name:'ShilshaTech', tone:'professional', audience:'professionals', country_code:'IN', language:'english', posts_per_week:3 };
   saveState();
-  showLoading('Loading your dashboard...', 'Fetching posts and platform status');
-  setTimeout(() => goDashboard(), 1200);
+  goDashboard();
 }
 
 function doLogout() {
-  state.user = null;
-  state.token = null;
-  state.posts = [];
-  state.platforms = { facebook: false, instagram: false, linkedin: false };
-  saveState();
-  closeAvatarMenu();
-  showScreen('screen-login');
+  state.user=null; state.token=null; state.posts=[];
+  state.platforms={facebook:false,instagram:false,linkedin:false};
+  state.userProfile=null;
+  saveState(); closeAvatarMenu(); showScreen('screen-login');
   toast('Signed out successfully');
 }
 
 function showAccountInfo() {
-  closeAvatarMenu();
   const u = state.user;
-  const conn = Object.entries(state.platforms).filter(([,v])=>v).map(([k])=>k).join(', ') || 'None';
+  const conn = Object.entries(state.platforms).filter(([,v])=>v).map(([k])=>k).join(', ')||'None';
   document.getElementById('account-modal-body').innerHTML =
-    `<strong>Name:</strong> ${u.name}<br><br>` +
-    `<strong>Email:</strong> ${u.email}<br><br>` +
-    `<strong>Connected platforms:</strong> ${conn}<br><br>` +
-    `<strong>Total posts:</strong> ${state.posts.length}`;
+    `<strong>Name:</strong> ${u.name}<br><br><strong>Email:</strong> ${u.email}<br><br><strong>Connected:</strong> ${conn}<br><br><strong>Total posts:</strong> ${state.posts.length}`;
   document.getElementById('account-modal').classList.add('open');
 }
 
-// ═══════════════════════════════════════════
-// PLATFORM CONNECT (OAuth mock)
-// ═══════════════════════════════════════════
+// ═══ QUESTIONNAIRE ═══
+function selectOption(btn, field, value) {
+  const grid = btn.closest('.option-grid');
+  grid.querySelectorAll('.option-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  questData[field] = value;
+}
 
+function goToQuestionnaire() {
+  showScreen('screen-questionnaire');
+}
+
+async function saveProfile() {
+  const errEl = document.getElementById('quest-error');
+  errEl.style.display = 'none';
+  // Validate required fields
+  const missing = [];
+  if (!questData.persona) missing.push('who you are');
+  if (!questData.industry) missing.push('your industry');
+  if (!questData.brand_name.trim()) missing.push('your brand name');
+  if (!questData.tone) missing.push('your tone');
+  if (!questData.audience) missing.push('your audience');
+  if (missing.length) { errEl.textContent=`Please select: ${missing.join(', ')}`; errEl.style.display='block'; return; }
+
+  const btn = document.getElementById('btn-save-profile');
+  btn.disabled=true; btn.textContent='Saving...';
+  try {
+    questData.brand_name = document.getElementById('q-brand-name').value.trim() || questData.brand_name;
+    questData.country_code = document.getElementById('q-country').value;
+    questData.language = document.getElementById('q-language').value;
+    questData.posts_per_week = parseInt(document.getElementById('q-ppw').value);
+
+    await apiPost('/user/profile', questData);
+    state.userProfile = { ...questData };
+    saveState();
+    toast('Profile saved ✅ AI will now generate posts for you!');
+    goDashboard();
+  } catch(e) { errEl.textContent=e.message; errEl.style.display='block'; }
+  finally { btn.disabled=false; btn.textContent='Save & go to dashboard →'; }
+}
+
+async function loadUserProfile() {
+  if (!state.token) return;
+  try {
+    const profile = await apiGet('/user/profile');
+    state.userProfile = profile;
+    saveState();
+  } catch(e) {
+    // 404 = no profile yet, that's fine
+    state.userProfile = null;
+  }
+}
+
+function showProfileModal() {
+  const p = state.userProfile;
+  if (!p) {
+    document.getElementById('profile-modal-body').innerHTML = '<p style="color:var(--text-muted);font-size:13px;">No profile set up yet. Complete the questionnaire to enable AI post generation.</p>';
+  } else {
+    const rows = [
+      ['Persona', p.persona],
+      ['Industry', p.industry],
+      ['Brand', p.brand_name],
+      ['Tone', p.tone],
+      ['Audience', p.audience],
+      ['Country', p.country_code],
+      ['Language', p.language],
+      ['Posts/week', p.posts_per_week],
+    ];
+    document.getElementById('profile-modal-body').innerHTML = rows.map(([label, val]) =>
+      `<div class="profile-row"><span class="profile-row-label">${label}</span><span class="profile-row-val">${val || '—'}</span></div>`
+    ).join('');
+  }
+  document.getElementById('profile-modal').classList.add('open');
+}
+
+// ═══ PLATFORM CONNECT ═══
+async function refreshPlatformStatus() {
+  if (!state.token) return;
+  try {
+    const status = await apiGet('/platforms/status');
+    state.platforms.facebook  = status.facebook  === 'connected';
+    state.platforms.instagram = status.instagram === 'connected';
+    state.platforms.linkedin  = status.linkedin  === 'connected';
+    saveState(); updateConnectScreen(); updatePlatformStatus();
+  } catch(e) { console.warn('Platform status error', e); }
+}
 
 async function openOAuth(platform) {
-  if (state.platforms[platform]) {
-    toast(`${platform} is already connected ✅`);
-    return;
-  }
-
-  const route = platform === 'linkedin'
-    ? '/auth/linkedin/connect'
-    : '/auth/facebook/connect';
-
+  if (state.platforms[platform]) { toast(`${platform} already connected ✅`); return; }
+  const route = platform === 'linkedin' ? '/auth/linkedin/connect' : '/auth/facebook/connect';
   try {
     const data = await apiGet(route);
-
     if (data.already_connected) {
-      state.platforms[platform] = true;
-      saveState();
-      updateConnectScreen();
-      updatePlatformStatus();
-      toast(`${platform} already connected ✅`);
-      return;
+      state.platforms[platform] = true; saveState();
+      updateConnectScreen(); updatePlatformStatus();
+      toast(`${platform} already connected ✅`); return;
     }
-
-    const popup = window.open(
-      data.oauth_url,
-      '_blank',
-      'width=600,height=700'
-    );
-
-    if (!popup) {
-      toast('Popup blocked. Please allow popups and try again.');
-      return;
-    }
-
-    toast(`Complete login in the popup window`);
-
-    // Poll until popup closes
+    const popup = window.open(data.oauth_url, '_blank', 'width=600,height=700');
+    if (!popup) { toast('Popup blocked. Allow popups and try again.'); return; }
     const poll = setInterval(async () => {
-      if (popup.closed) {
-        clearInterval(poll);
-        await refreshPlatformStatusFromBackend();
-      }
+      if (popup.closed) { clearInterval(poll); await refreshPlatformStatus(); }
     }, 1000);
-
-  } catch (error) {
-    handleApiError(error);
-  }
-}
-
-
-
-function confirmOAuth() {
-  // legacy mock flow no longer used
-}
-
-function cancelOAuth() {
-  // legacy mock flow no longer used
+  } catch(e) { toast(e.message); }
 }
 
 function updateConnectScreen() {
   ['facebook','instagram','linkedin'].forEach(p => {
     const btn = document.getElementById(`cbtn-${p}`);
     const card = document.getElementById(`pcard-${p}`);
-    if (!btn || !card) return;
+    if (!btn||!card) return;
     if (state.platforms[p]) {
-      btn.className = 'btn-connect connected';
-      btn.innerHTML = '✓ Connected';
-      card.className = 'platform-card connected';
+      btn.className='btn-connect connected'; btn.innerHTML='✓ Connected';
+      card.className='platform-card connected';
     } else {
-      btn.className = 'btn-connect';
-      btn.innerHTML = `<svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Connect`;
-      card.className = 'platform-card';
+      btn.className='btn-connect';
+      btn.innerHTML=`<svg viewBox="0 0 24 24" style="width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Connect`;
+      card.className='platform-card';
     }
   });
 }
 
-// ═══════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════
-
+// ═══ DASHBOARD ═══
 function goDashboard() {
   if (!state.user) { showScreen('screen-login'); return; }
   const u = state.user;
   document.getElementById('dash-greeting').textContent = `${greetingText()}, ${u.name}! 👋`;
   document.getElementById('topbar-user-name').textContent = u.email;
-  const avatarBtn = document.getElementById('avatar-btn');
-  avatarBtn.textContent = u.initials || u.name[0].toUpperCase();
-
+  document.getElementById('avatar-btn').textContent = u.initials||u.name[0].toUpperCase();
   const h = new Date().getHours();
-  document.getElementById('dash-subtext').textContent =
-    h < 12 ? 'Here\'s what\'s happening with your posts today.' :
-    h < 17 ? 'Keep the momentum going — here\'s your post overview.' :
-    'Wrapping up the day — here\'s your activity summary.';
-
-  const n = new Date(); n.setMinutes(n.getMinutes()+35);
-  const pad = v => String(v).padStart(2,'0');
-  document.getElementById('schedule-dt').value =
-    `${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}T${pad(n.getHours())}:${pad(n.getMinutes())}`;
-
+  document.getElementById('dash-subtext').textContent = h<12?'Here\'s what\'s happening with your posts today.':h<17?'Keep the momentum going — here\'s your post overview.':'Wrapping up the day — here\'s your activity summary.';
+  const n=new Date(); n.setMinutes(n.getMinutes()+35);
+  const pad=v=>String(v).padStart(2,'0');
+  document.getElementById('schedule-dt').value=`${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}T${pad(n.getHours())}:${pad(n.getMinutes())}`;
   showScreen('screen-dashboard');
-  updateConnectScreen();
-  updatePlatformStatus();
-  renderAll();
-  loadPostsFromBackend();
+  updateConnectScreen(); updatePlatformStatus();
+  renderAll(); loadPostsFromBackend();
 }
 
-
 function updatePlatformStatus() {
-  const plats = ['facebook','instagram','linkedin'];
-  const ids = ['fb','ig','li'];
-  let count = 0;
-  plats.forEach((p,i) => {
-    const connected = state.platforms[p];
-    if (connected) count++;
-    const dot = document.getElementById(`sdot-${ids[i]}`);
-    const badge = document.getElementById(`sbadge-${ids[i]}`);
-    if (dot) dot.className = 'status-dot ' + (connected ? 'dot-green' : 'dot-red');
-    if (badge) {
-      badge.textContent = connected ? 'Connected' : 'Not connected';
-      badge.className = 'badge ' + (connected ? 'badge-success' : 'badge-danger');
-    }
+  const map={facebook:'fb',instagram:'ig',linkedin:'li'};
+  let count=0;
+  Object.entries(state.platforms).forEach(([p,connected])=>{
+    if(connected) count++;
+    const id=map[p];
+    const dot=document.getElementById(`sdot-${id}`);
+    const badge=document.getElementById(`sbadge-${id}`);
+    if(dot) dot.className='status-dot '+(connected?'dot-green':'dot-red');
+    if(badge){ badge.textContent=connected?'Connected':'Not connected'; badge.className='badge '+(connected?'badge-success':'badge-danger'); }
   });
-  document.getElementById('m-platforms').textContent = count + '/3';
+  document.getElementById('m-platforms').textContent=count+'/3';
 }
 
 function renderAll() {
-  updateMetrics();
-  renderApprovals();
-  renderUpcoming();
-  renderCalendar();
-  renderActivityLog();
+  updateMetrics(); renderAISuggestions(); renderApprovals(); renderUpcoming(); renderCalendar(); renderActivityLog();
 }
 
 function updateMetrics() {
   document.getElementById('m-scheduled').textContent = state.posts.filter(p=>p.status==='scheduled').length;
   document.getElementById('m-published').textContent = state.posts.filter(p=>p.status==='posted').length;
-  document.getElementById('m-pending').textContent = state.posts.filter(p=>p.status==='awaiting_approval').length;
+  document.getElementById('m-pending').textContent   = state.posts.filter(p=>p.status==='awaiting_approval').length;
 }
 
-// ═══════════════════════════════════════════
-// APPROVALS
-// ═══════════════════════════════════════════
+// ═══ AI GENERATION ═══
+async function triggerAIGeneration() {
+  if (!state.userProfile) {
+    toast('Please complete your AI profile first.');
+    showScreen('screen-questionnaire'); return;
+  }
+  const btn = document.getElementById('btn-ai-gen');
+  const label = document.getElementById('ai-gen-label');
+  btn.disabled=true; label.textContent='Generating...';
+  try {
+    await apiPost('/ai/generate', {});
+    toast('✨ AI is generating posts — check your email to approve them!', 5000);
+    setTimeout(async () => { await loadPostsFromBackend(); }, 3000);
+  } catch(e) { toast('AI generation failed: '+e.message); }
+  finally { btn.disabled=false; label.textContent='Generate AI posts'; }
+}
+
+function renderAISuggestions() {
+  // AI posts are awaiting_approval with ai_generated flag OR just show all awaiting_approval separately
+  const aiPosts = state.posts.filter(p => p.status==='awaiting_approval' && p.ai_generated);
+  const section = document.getElementById('ai-section');
+  const list = document.getElementById('ai-list');
+  document.getElementById('ai-count').textContent = aiPosts.length;
+
+  if (!aiPosts.length) {
+    section.style.display = 'none'; return;
+  }
+  section.style.display = 'block';
+  list.innerHTML = aiPosts.map(p => `
+    <div class="ai-card fade-in-up">
+      <div class="ai-card-header">
+        <span class="ai-badge">✨ AI</span>
+        ${p.trigger_type ? `<span class="ai-trigger">${p.trigger_type==='event'?'📅':'🔥'} ${esc(p.trigger_name||'')}</span>` : ''}
+        <div class="post-plats" style="margin-left:auto;">${renderPlatChips(p.platforms)}</div>
+      </div>
+      <div class="ai-content">"${esc(p.content.substring(0,180))}${p.content.length>180?'...':''}"</div>
+      <div class="ai-meta">
+        <span>📅 Suggested for ${fmtShort(p.scheduledAt)}</span>
+      </div>
+      <div class="ai-btns">
+        <button class="btn-ai-approve" onclick="approvePost(${p.id})">✓ Approve & publish</button>
+        <button class="btn-ai-reject" onclick="openRejectModal(${p.id})">✕ Reject</button>
+      </div>
+    </div>`).join('');
+}
+
+// ═══ APPROVALS (manual) ═══
 function renderApprovals() {
-  const pending = state.posts.filter(p=>p.status==='awaiting_approval');
+  const pending = state.posts.filter(p => p.status==='awaiting_approval' && !p.ai_generated);
   const section = document.getElementById('approval-section');
   const list = document.getElementById('approval-list');
   document.getElementById('approval-count').textContent = pending.length;
-  if (!pending.length) { section.style.display = 'none'; return; }
-  section.style.display = 'block';
+  if (!pending.length) { section.style.display='none'; return; }
+  section.style.display='block';
   list.innerHTML = pending.map(p => `
-    <div class="approval-card fade-in-up" id="acard-${p.id}">
+    <div class="approval-card fade-in-up">
       <div class="approval-content">"${esc(p.content.substring(0,100))}${p.content.length>100?'...':''}"</div>
       <div class="approval-meta">
-        <span>🕐 ${fmtDate(p.scheduledAt)}</span>
-        <span>·</span>
+        <span>🕐 ${fmtDate(p.scheduledAt)}</span>·
         <div class="post-plats">${renderPlatChips(p.platforms)}</div>
-        <span>·</span>
-        <span>${p.recurrence === 'ONE_TIME' ? 'One time' : p.recurrence.toLowerCase().replace(/_/g,' ')}</span>
       </div>
       <div class="approval-btns">
         <button class="btn-approve" onclick="approvePost(${p.id})">✓ Approve & publish</button>
@@ -1303,456 +1286,273 @@ async function approvePost(id) {
     await apiPost(`/posts/${id}/publish`, {});
     await loadPostsFromBackend();
     toast('Post queued for publishing ✅');
-  } catch (error) {
-    handleApiError(error);
-  }
+  } catch(e) { toast('Error: '+e.message); }
 }
 
 function editPost(id) {
   const post = state.posts.find(p=>p.id===id);
   if (!post) return;
-  // Populate composer
   document.getElementById('post-text').value = post.content;
   updateCharCount();
   document.getElementById('chk-fb').checked = post.platforms.includes('facebook');
   document.getElementById('chk-ig').checked = post.platforms.includes('instagram');
   document.getElementById('chk-li').checked = post.platforms.includes('linkedin');
-  // Remove old post
   state.posts = state.posts.filter(p=>p.id!==id);
-  saveState();
-  renderAll();
-  document.querySelector('.card.composer, .card').scrollIntoView({ behavior: 'smooth' });
+  saveState(); renderAll();
+  document.querySelector('.compose-textarea').scrollIntoView({ behavior:'smooth' });
   toast('Post loaded into composer for editing');
 }
 
-function openRejectModal(id) {
-  state.rejectPostId = id;
-  document.getElementById('reject-modal').classList.add('open');
-}
-function closeRejectModal() {
-  document.getElementById('reject-modal').classList.remove('open');
-  state.rejectPostId = null;
-}
+function openRejectModal(id) { state.rejectPostId=id; document.getElementById('reject-modal').classList.add('open'); }
+function closeRejectModal() { document.getElementById('reject-modal').classList.remove('open'); state.rejectPostId=null; }
 async function confirmReject() {
-  const postId = state.rejectPostId;
-  closeRejectModal();
-  if (!postId) return;
-
+  const id = state.rejectPostId;
+  closeRejectModal(); if (!id) return;
   try {
-    await apiRequest(`/posts/${postId}`, { method: 'DELETE' });
+    await apiRequest(`/posts/${id}`, { method:'DELETE' });
     await loadPostsFromBackend();
     toast('Post cancelled ✅');
-  } catch (error) {
-    handleApiError(error);
-  }
+  } catch(e) { toast('Error: '+e.message); }
 }
 
-// ═══════════════════════════════════════════
-// COMPOSE
-// ═══════════════════════════════════════════
+// ═══ COMPOSE ═══
 function updateCharCount() {
   const len = document.getElementById('post-text').value.length;
   const el = document.getElementById('char-count-el');
-  el.textContent = `${len} / 2200 characters`;
-  el.className = 'char-count' + (len > 2000 ? ' warn' : '') + (len > 2200 ? ' over' : '');
+  el.textContent=`${len} / 2200 characters`;
+  el.className='char-count'+(len>2000?' warn':'')+(len>2200?' over':'');
 }
-
 
 async function schedulePost() {
   const text = document.getElementById('post-text').value.trim();
   if (!text) { toast('Write some content first!'); return; }
-  const fb = document.getElementById('chk-fb').checked;
-  const ig = document.getElementById('chk-ig').checked;
-  const li = document.getElementById('chk-li').checked;
-  if (!fb && !ig && !li) { toast('Select at least one platform'); return; }
-  const dt = document.getElementById('schedule-dt').value;
+  const fb=document.getElementById('chk-fb').checked;
+  const ig=document.getElementById('chk-ig').checked;
+  const li=document.getElementById('chk-li').checked;
+  if (!fb&&!ig&&!li) { toast('Select at least one platform'); return; }
+  const dt=document.getElementById('schedule-dt').value;
   if (!dt) { toast('Pick a date and time'); return; }
-  if (new Date(dt) < new Date()) { toast('Please choose a future date and time'); return; }
-
-  const platforms = [fb&&'facebook', ig&&'instagram', li&&'linkedin'].filter(Boolean);
-  const mediaUrl = document.getElementById('media-final-url').value.trim();
-  const recurrenceVal = document.getElementById('recurrence').value;
-
-  if (ig && !mediaUrl) {
-    toast('Instagram requires an uploaded image or image URL.');
-    return;
-  }
-
-  // Map frontend recurrence to backend values
-  const recurrenceMap = {
-    'ONE_TIME'    : 'ONE_TIME',
-    'EVERY_2_DAYS': 'EVERY_X_DAYS',
-    'WEEKLY'      : 'WEEKLY',
-    'MONTHLY'     : 'MONTHLY'
-  };
-
-  const recurrenceType = recurrenceMap[recurrenceVal] || 'ONE_TIME';
-  const intervalDays = recurrenceVal === 'EVERY_2_DAYS' ? 2 : 1;
-
-  const btn = document.getElementById('btn-schedule');
-  btn.disabled = true;
-  btn.textContent = 'Scheduling...';
+  if (new Date(dt)<new Date()) { toast('Please choose a future date and time'); return; }
+  const platforms=[fb&&'facebook',ig&&'instagram',li&&'linkedin'].filter(Boolean);
+  const mediaUrl=document.getElementById('media-final-url').value.trim();
+  const recurrenceVal=document.getElementById('recurrence').value;
+  if (ig&&!mediaUrl) { toast('Instagram requires an image.'); return; }
+  const recurrenceMap={'ONE_TIME':'ONE_TIME','EVERY_2_DAYS':'EVERY_X_DAYS','WEEKLY':'WEEKLY','MONTHLY':'MONTHLY'};
+  const btn=document.getElementById('btn-schedule');
+  btn.disabled=true; btn.textContent='Scheduling...';
   try {
-  const response = await apiPost('/posts/', {
-      content_text    : text,
-      platforms       : platforms,
-      recurrence_type : recurrenceType,
-      interval_days   : intervalDays,
-      start_date      : new Date(dt).toISOString(),
-      media_url       : mediaUrl || null
+    await apiPost('/posts/', {
+      content_text: text, platforms,
+      recurrence_type: recurrenceMap[recurrenceVal]||'ONE_TIME',
+      interval_days: recurrenceVal==='EVERY_2_DAYS'?2:1,
+      start_date: new Date(dt).toISOString(),
+      media_url: mediaUrl||null
     });
-
-    document.getElementById('post-text').value = '';
-    document.getElementById('char-count-el').textContent = '0 / 2200 characters';
-    document.getElementById('media-final-url').value = '';
-    document.getElementById('ig-image-url').value    = '';
-    document.getElementById('media-row').style.display = 'none';
+    document.getElementById('post-text').value='';
+    document.getElementById('char-count-el').textContent='0 / 2200 characters';
+    document.getElementById('media-final-url').value='';
+    document.getElementById('ig-image-url').value='';
     clearMedia();
-
     toast('Post scheduled ✅ Confirmation email sent 30 min before publish time');
-
-    // Reload posts from backend
     await loadPostsFromBackend();
-
-  } catch(e) {
-    handleApiError(e);
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Schedule post`;
+  } catch(e) { toast('Error: '+e.message); }
+  finally {
+    btn.disabled=false;
+    btn.innerHTML=`<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Schedule post`;
   }
 }
-
-
 
 async function loadPostsFromBackend() {
   if (!state.token) return;
   try {
     const data = await apiGet('/posts/');
-    // Convert backend format to frontend format
-    state.posts = (data.posts || []).map(p => ({
-      id         : p.id,
-      content    : p.content_text,
-      platforms  : p.platforms || [],
-      status     : p.status,
-      scheduledAt: p.scheduled_at,
-      recurrence : p.recurrence_type || 'ONE_TIME',
-      createdAt  : p.created_at || p.scheduled_at
+    state.posts = (data.posts||[]).map(p => ({
+      id: p.id, content: p.content_text, platforms: p.platforms||[],
+      status: p.status, scheduledAt: p.scheduled_at,
+      recurrence: p.recurrence_type||'ONE_TIME',
+      createdAt: p.created_at||p.scheduled_at,
+      ai_generated: p.ai_generated||false,
+      trigger_type: p.trigger_type||null,
+      trigger_name: p.trigger_name||null
     }));
-    saveState();
-    renderAll();
-  } catch(e) {
-    console.warn('Failed to load posts:', e);
-  }
+    saveState(); renderAll();
+  } catch(e) { console.warn('Failed to load posts:', e); }
 }
 
-
-// ═══════════════════════════════════════════
-// UPCOMING POSTS
-// ═══════════════════════════════════════════
+// ═══ UPCOMING ═══
 function renderUpcoming() {
   const list = document.getElementById('upcoming-list');
   const upcoming = state.posts
-    .filter(p => ['scheduled','awaiting_approval','posted'].includes(p.status))
-    .sort((a,b) => new Date(a.scheduledAt)-new Date(b.scheduledAt))
-    .slice(0,5);
-
-  if (!upcoming.length) {
-    list.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>No upcoming posts</div>`;
-    return;
-  }
-
-  list.innerHTML = upcoming.map(p => `
+    .filter(p=>['scheduled','awaiting_approval','posted'].includes(p.status))
+    .sort((a,b)=>new Date(a.scheduledAt)-new Date(b.scheduledAt)).slice(0,5);
+  if (!upcoming.length) { list.innerHTML=`<div class="empty-state"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>No upcoming posts</div>`; return; }
+  list.innerHTML = upcoming.map(p=>`
     <div class="post-item">
-      <div class="post-preview">"${esc(p.content.substring(0,60))}${p.content.length>60?'...':''}"</div>
-      <div class="post-meta">
-        ${statusBadge(p.status)}
-        <span>${fmtShort(p.scheduledAt)}</span>
-        <div class="post-plats">${renderPlatChips(p.platforms)}</div>
-      </div>
+      <div class="post-preview">${p.ai_generated?'✨ ':''}"${esc(p.content.substring(0,60))}${p.content.length>60?'...':''}"</div>
+      <div class="post-meta">${statusBadge(p.status)}<span>${fmtShort(p.scheduledAt)}</span><div class="post-plats">${renderPlatChips(p.platforms)}</div></div>
     </div>`).join('');
 }
 
-// ═══════════════════════════════════════════
-// ACTIVITY LOG
-// ═══════════════════════════════════════════
+// ═══ ACTIVITY LOG ═══
 function filterLog(status, btn) {
-  state.logFilter = status;
-  document.querySelectorAll('.tabs .tab').forEach(t => t.classList.remove('active'));
-  btn.classList.add('active');
-  renderActivityLog();
+  state.logFilter=status;
+  document.querySelectorAll('.tabs .tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active'); renderActivityLog();
 }
 
 function renderActivityLog() {
-  const list = document.getElementById('activity-list');
-  let filtered = state.logFilter === 'all' ? state.posts : state.posts.filter(p=>p.status===state.logFilter);
-  filtered = [...filtered].sort((a,b)=>new Date(b.createdAt||b.scheduledAt)-new Date(a.createdAt||a.scheduledAt));
-
-  if (!filtered.length) {
-    list.innerHTML = `<div class="empty-state"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Nothing here yet</div>`;
-    return;
-  }
-
-  const iconMap = {
-    posted: `<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`,
-    scheduled: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-    awaiting_approval: `<svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
-    failed: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
-    cancelled: `<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
+  const list=document.getElementById('activity-list');
+  let filtered=state.logFilter==='all'?state.posts:state.posts.filter(p=>p.status===state.logFilter);
+  filtered=[...filtered].sort((a,b)=>new Date(b.createdAt||b.scheduledAt)-new Date(a.createdAt||a.scheduledAt));
+  if (!filtered.length) { list.innerHTML=`<div class="empty-state"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Nothing here yet</div>`; return; }
+  const iconMap={
+    posted:`<svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>`,
+    scheduled:`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
+    awaiting_approval:`<svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    failed:`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`,
+    cancelled:`<svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   };
-
-  list.innerHTML = filtered.map(p => `
+  list.innerHTML=filtered.map(p=>`
     <div class="activity-item">
-      <div class="activity-icon ${p.status}">${iconMap[p.status] || iconMap.scheduled}</div>
+      <div class="activity-icon ${p.status}">${iconMap[p.status]||iconMap.scheduled}</div>
       <div class="activity-body">
-        <div class="activity-text">"${esc(p.content.substring(0,70))}${p.content.length>70?'...':''}"</div>
+        <div class="activity-text">${p.ai_generated?'✨ ':''}"${esc(p.content.substring(0,70))}${p.content.length>70?'...':''}"</div>
         <div class="activity-meta">
           ${statusBadge(p.status)}
           <span>${fmtShort(p.scheduledAt)}</span>
           <div class="post-plats">${renderPlatChips(p.platforms)}</div>
-          ${p.status==='scheduled' ? `<button class="btn-skip-sm" onclick="skipPost(${p.id})">Skip</button>` : ''}
+          ${p.ai_generated?'<span class="badge badge-ai">AI</span>':''}
+          ${p.status==='scheduled'?`<button class="btn-skip-sm" onclick="skipPost(${p.id})">Skip</button>`:''}
         </div>
       </div>
     </div>`).join('');
 }
 
 async function skipPost(id) {
-  try {
-    await apiRequest(`/posts/${id}/skip`, { method: 'PATCH' });
-    await loadPostsFromBackend();
-    toast('Post skipped ✅');
-  } catch (error) {
-    handleApiError(error);
-  }
+  try { await apiRequest(`/posts/${id}/skip`,{method:'PATCH'}); await loadPostsFromBackend(); toast('Post skipped ✅'); }
+  catch(e) { toast('Error: '+e.message); }
 }
 
-// ═══════════════════════════════════════════
-// CALENDAR
-// ═══════════════════════════════════════════
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
+// ═══ CALENDAR ═══
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function renderCalendar() {
-  document.getElementById('cal-title').textContent = MONTHS[state.calMonth] + ' ' + state.calYear;
-  document.getElementById('cal-headers').innerHTML =
-    ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="cal-header-cell">${d}</div>`).join('');
-
-  const today = new Date();
-  const firstDay = new Date(state.calYear, state.calMonth, 1).getDay();
-  const daysInMonth = new Date(state.calYear, state.calMonth+1, 0).getDate();
-  const daysInPrev = new Date(state.calYear, state.calMonth, 0).getDate();
-
-  let cells = '';
-  for (let i=0; i<firstDay; i++) {
-    cells += `<div class="cal-day other"><div class="cal-day-num">${daysInPrev-firstDay+i+1}</div></div>`;
-  }
-  for (let d=1; d<=daysInMonth; d++) {
-    const isToday = d===today.getDate() && state.calMonth===today.getMonth() && state.calYear===today.getFullYear();
-    const dayPosts = state.posts.filter(p => {
-      const pd = new Date(p.scheduledAt);
-      return pd.getDate()===d && pd.getMonth()===state.calMonth && pd.getFullYear()===state.calYear;
-    });
-    const dots = dayPosts.map(p => {
-      const cls = p.status==='posted' ? 'cdot-green' : p.status==='awaiting_approval' ? 'cdot-orange' : p.status==='failed' ? 'cdot-red' : 'cdot-blue';
-      return `<div class="cdot ${cls}" title="${p.status}"></div>`;
+  document.getElementById('cal-title').textContent=MONTHS[state.calMonth]+' '+state.calYear;
+  document.getElementById('cal-headers').innerHTML=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="cal-header-cell">${d}</div>`).join('');
+  const today=new Date();
+  const firstDay=new Date(state.calYear,state.calMonth,1).getDay();
+  const daysInMonth=new Date(state.calYear,state.calMonth+1,0).getDate();
+  const daysInPrev=new Date(state.calYear,state.calMonth,0).getDate();
+  let cells='';
+  for(let i=0;i<firstDay;i++) cells+=`<div class="cal-day other"><div class="cal-day-num">${daysInPrev-firstDay+i+1}</div></div>`;
+  for(let d=1;d<=daysInMonth;d++){
+    const isToday=d===today.getDate()&&state.calMonth===today.getMonth()&&state.calYear===today.getFullYear();
+    const dayPosts=state.posts.filter(p=>{const pd=new Date(p.scheduledAt);return pd.getDate()===d&&pd.getMonth()===state.calMonth&&pd.getFullYear()===state.calYear;});
+    const dots=dayPosts.map(p=>{
+      const cls=p.ai_generated?'cdot-purple':p.status==='posted'?'cdot-green':p.status==='awaiting_approval'?'cdot-orange':p.status==='failed'?'cdot-red':'cdot-blue';
+      return `<div class="cdot ${cls}"></div>`;
     }).join('');
-    cells += `<div class="cal-day${isToday?' today':''}"><div class="cal-day-num">${d}</div><div class="cal-dots">${dots}</div></div>`;
+    cells+=`<div class="cal-day${isToday?' today':''}"><div class="cal-day-num">${d}</div><div class="cal-dots">${dots}</div></div>`;
   }
-  const remaining = (7 - (firstDay + daysInMonth) % 7) % 7;
-  for (let d=1; d<=remaining; d++) {
-    cells += `<div class="cal-day other"><div class="cal-day-num">${d}</div></div>`;
-  }
-  document.getElementById('cal-grid').innerHTML = cells;
+  const rem=(7-(firstDay+daysInMonth)%7)%7;
+  for(let d=1;d<=rem;d++) cells+=`<div class="cal-day other"><div class="cal-day-num">${d}</div></div>`;
+  document.getElementById('cal-grid').innerHTML=cells;
 }
-
-function shiftMonth(dir) {
-  state.calMonth += dir;
-  if (state.calMonth > 11) { state.calMonth=0; state.calYear++; }
-  if (state.calMonth < 0) { state.calMonth=11; state.calYear--; }
+function shiftMonth(dir){
+  state.calMonth+=dir;
+  if(state.calMonth>11){state.calMonth=0;state.calYear++;}
+  if(state.calMonth<0){state.calMonth=11;state.calYear--;}
   renderCalendar();
 }
 
-// ═══════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════
-function statusBadge(s) {
-  const map = {
-    scheduled: ['badge-info','Scheduled'],
-    awaiting_approval: ['badge-warning','Awaiting approval'],
-    posted: ['badge-success','Published'],
-    failed: ['badge-danger','Failed'],
-    cancelled: ['badge-gray','Cancelled'],
-    skipped: ['badge-gray','Skipped'],
-  };
-  const [cls, label] = map[s] || ['badge-gray', s];
+// ═══ HELPERS ═══
+function statusBadge(s){
+  const map={scheduled:['badge-info','Scheduled'],awaiting_approval:['badge-warning','Awaiting'],posted:['badge-success','Published'],failed:['badge-danger','Failed'],cancelled:['badge-gray','Cancelled'],skipped:['badge-gray','Skipped']};
+  const[cls,label]=map[s]||['badge-gray',s];
   return `<span class="badge ${cls}">${label}</span>`;
 }
-
-function renderPlatChips(platforms) {
-  return (platforms||[]).map(p => {
-    const cls = p==='facebook'?'fb':p==='instagram'?'ig':'li';
-    const label = p==='facebook'?'FB':p==='instagram'?'IG':'LI';
-    return `<span class="plat-chip ${cls}">${label}</span>`;
-  }).join('');
+function renderPlatChips(platforms){
+  return(platforms||[]).map(p=>{const cls=p==='facebook'?'fb':p==='instagram'?'ig':'li';const label=p==='facebook'?'FB':p==='instagram'?'IG':'LI';return`<span class="plat-chip ${cls}">${label}</span>`;}).join('');
 }
 
-function esc(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function toggleAvatarMenu(){document.getElementById('avatar-menu').classList.toggle('open');}
+function closeAvatarMenu(){document.getElementById('avatar-menu').classList.remove('open');}
+document.addEventListener('click',e=>{if(!e.target.closest('.avatar-wrap'))closeAvatarMenu();});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&document.getElementById('screen-login').classList.contains('active'))doLogin();});
+
+// ═══ MEDIA UPLOAD ═══
+function updateMediaRowVisibility(){
+  const any=[document.getElementById('chk-fb'),document.getElementById('chk-ig'),document.getElementById('chk-li')].some(el=>el.checked);
+  document.getElementById('media-row').style.display=any?'flex':'none';
+}
+document.querySelectorAll('#chk-fb,#chk-ig,#chk-li').forEach(el=>el.addEventListener('change',updateMediaRowVisibility));
+updateMediaRowVisibility();
+
+function switchMediaTab(tab){
+  const isUpload=tab==='upload';
+  document.getElementById('media-panel-upload').style.display=isUpload?'block':'none';
+  document.getElementById('media-panel-url').style.display=isUpload?'none':'block';
+  const btnU=document.getElementById('media-tab-upload'),btnUrl=document.getElementById('media-tab-url');
+  btnU.style.background=isUpload?'var(--text)':'transparent'; btnU.style.color=isUpload?'#fff':'var(--text-muted)'; btnU.style.borderColor=isUpload?'var(--text)':'var(--border)';
+  btnUrl.style.background=!isUpload?'var(--text)':'transparent'; btnUrl.style.color=!isUpload?'#fff':'var(--text-muted)'; btnUrl.style.borderColor=!isUpload?'var(--text)':'var(--border)';
+  if(!isUpload) document.getElementById('media-final-url').value='';
+}
+function handleMediaDrop(e){e.preventDefault();const file=e.dataTransfer.files[0];if(file)uploadMediaFile(file);}
+function handleMediaFileSelect(e){const file=e.target.files[0];if(file)uploadMediaFile(file);}
+async function uploadMediaFile(file){
+  if(!['image/jpeg','image/jpg','image/png'].includes(file.type)){toast('❌ Only JPEG and PNG supported');return;}
+  if(file.size>8*1024*1024){toast('❌ Image must be under 8MB');return;}
+  document.getElementById('media-dropzone').style.display='none';
+  document.getElementById('media-upload-progress').style.display='flex';
+  document.getElementById('media-preview').style.display='none';
+  document.getElementById('media-upload-status').textContent='Uploading...';
+  const formData=new FormData(); formData.append('file',file);
+  try {
+    const res=await apiRequest('/media/upload',{method:'POST',body:formData});
+    const url=res.url||res.secure_url;
+    if(!url) throw new Error('Upload response invalid');
+    document.getElementById('media-final-url').value=url;
+    document.getElementById('media-upload-progress').style.display='none';
+    document.getElementById('media-preview').style.display='inline-block';
+    document.getElementById('media-preview-img').src=url;
+    toast('✅ Image uploaded!');
+  } catch(e){
+    document.getElementById('media-upload-progress').style.display='none';
+    document.getElementById('media-dropzone').style.display='block';
+    toast('❌ Upload failed: '+e.message);
+  }
+}
+function clearMedia(){
+  document.getElementById('media-final-url').value='';
+  document.getElementById('media-preview').style.display='none';
+  document.getElementById('media-dropzone').style.display='block';
+  document.getElementById('media-file-input').value='';
+}
+function handleUrlInput(val){
+  document.getElementById('media-final-url').value=val;
+  const preview=document.getElementById('url-preview');
+  const img=document.getElementById('url-preview-img');
+  if(val.startsWith('http')){img.src=val;preview.style.display='block';}
+  else{preview.style.display='none';}
 }
 
-// Avatar menu
-function toggleAvatarMenu() {
-  document.getElementById('avatar-menu').classList.toggle('open');
-}
-function closeAvatarMenu() {
-  document.getElementById('avatar-menu').classList.remove('open');
-}
-document.addEventListener('click', e => {
-  if (!e.target.closest('.avatar-wrap')) closeAvatarMenu();
-});
-
-// Enter to login
-document.addEventListener('keydown', e => {
-  if (e.key==='Enter' && document.getElementById('screen-login').classList.contains('active')) doLogin();
-});
-
-// ═══════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════
+// ═══ INIT ═══
 window.addEventListener('DOMContentLoaded', async () => {
   const restored = loadState();
   if (restored && state.token) {
     try {
-      await fetchCurrentUser();
-      await refreshPlatformStatusFromBackend();
+      await refreshPlatformStatus();
+      await loadUserProfile();
       goDashboard();
-    } catch (error) {
-      console.warn('Saved auth token invalid or expired', error);
-      state.token = null;
-      state.user = null;
-      saveState();
-      showScreen('screen-login');
+    } catch(e) {
+      state.token=null; state.user=null; saveState(); showScreen('screen-login');
     }
   } else if (restored && state.user) {
     goDashboard();
   } else {
     showScreen('screen-login');
   }
-  renderCalendar();
-  updateConnectScreen();
+  renderCalendar(); updateConnectScreen();
 });
-  function updateMediaRowVisibility() {
-    const anySelected = [
-      document.getElementById('chk-fb').checked,
-      document.getElementById('chk-ig').checked,
-      document.getElementById('chk-li').checked
-    ].some(Boolean);
-    document.getElementById('media-row').style.display = anySelected ? 'flex' : 'none';
-  }
-
-  document.querySelectorAll('#chk-fb, #chk-ig, #chk-li').forEach(el => {
-    el.addEventListener('change', updateMediaRowVisibility);
-  });
-
-  updateMediaRowVisibility();
-
-
-// ═══════════════════════════════════════════
-// MEDIA UPLOAD
-// ═══════════════════════════════════════════
-function switchMediaTab(tab) {
-  const isUpload = tab === 'upload';
-  document.getElementById('media-panel-upload').style.display = isUpload ? 'block' : 'none';
-  document.getElementById('media-panel-url').style.display    = isUpload ? 'none' : 'block';
-
-  const btnUpload = document.getElementById('media-tab-upload');
-  const btnUrl    = document.getElementById('media-tab-url');
-  btnUpload.style.background    = isUpload ? 'var(--text)' : 'transparent';
-  btnUpload.style.color         = isUpload ? '#fff' : 'var(--text-muted)';
-  btnUpload.style.borderColor   = isUpload ? 'var(--text)' : 'var(--border)';
-  btnUrl.style.background       = !isUpload ? 'var(--text)' : 'transparent';
-  btnUrl.style.color            = !isUpload ? '#fff' : 'var(--text-muted)';
-  btnUrl.style.borderColor      = !isUpload ? 'var(--text)' : 'var(--border)';
-
-  if (!isUpload) document.getElementById('media-final-url').value = '';
-}
-
-function handleMediaDrop(e) {
-  e.preventDefault();
-  document.getElementById('media-dropzone').style.borderColor = 'var(--border-strong)';
-  const file = e.dataTransfer.files[0];
-  if (file) uploadMediaFile(file);
-}
-
-function handleMediaFileSelect(e) {
-  const file = e.target.files[0];
-  if (file) uploadMediaFile(file);
-}
-
-async function uploadMediaFile(file) {
-  if (!['image/jpeg','image/jpg','image/png'].includes(file.type)) {
-    toast('❌ Only JPEG and PNG images are supported for Instagram');
-    return;
-  }
-  if (file.size > 8 * 1024 * 1024) {
-    toast('❌ Image must be under 8MB');
-    return;
-  }
-
-  document.getElementById('media-dropzone').style.display       = 'none';
-  document.getElementById('media-upload-progress').style.display = 'flex';
-  document.getElementById('media-preview').style.display         = 'none';
-  document.getElementById('media-upload-status').textContent     = 'Uploading to server...';
-  document.getElementById('media-progress-bar').style.width      = '30%';
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    document.getElementById('media-progress-bar').style.width = '60%';
-
-    const res = await apiRequest('/media/upload', { method: 'POST', body: formData });
-    document.getElementById('media-progress-bar').style.width = '100%';
-    document.getElementById('media-upload-status').textContent = '✅ Uploaded!';
-
-    const imageUrl = res.url || res.secure_url;
-    if (!imageUrl) throw new Error('Upload response invalid');
-
-    document.getElementById('media-final-url').value = imageUrl;
-
-    setTimeout(() => {
-      document.getElementById('media-upload-progress').style.display = 'none';
-      document.getElementById('media-preview').style.display          = 'inline-block';
-      document.getElementById('media-preview-img').src                = imageUrl;
-    }, 500);
-
-    toast('✅ Image uploaded successfully!');
-  } catch (err) {
-    document.getElementById('media-upload-progress').style.display = 'none';
-    document.getElementById('media-dropzone').style.display         = 'block';
-    toast('❌ Upload failed: ' + err.message);
-  }
-}
-
-function clearMedia() {
-  document.getElementById('media-final-url').value           = '';
-  document.getElementById('media-preview').style.display      = 'none';
-  document.getElementById('media-dropzone').style.display     = 'block';
-  document.getElementById('media-file-input').value           = '';
-  document.getElementById('media-progress-bar').style.width   = '0%';
-}
-
-function handleUrlInput(val) {
-  document.getElementById('media-final-url').value = val;
-  const preview = document.getElementById('url-preview');
-  const img     = document.getElementById('url-preview-img');
-  if (val.startsWith('http')) {
-    img.src = val;
-    preview.style.display = 'block';
-  } else {
-    preview.style.display = 'none';
-  }
-}
-
 </script>
-
 </body>
 </html>

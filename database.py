@@ -137,6 +137,46 @@ def create_schema():
                 );
             """)
 
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS user_profiles (
+                    id              SERIAL PRIMARY KEY,
+                    user_id         INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,                    
+                    persona         VARCHAR(50),    
+                    industry        VARCHAR(100), 
+                    brand_name      VARCHAR(100),                     
+                    tone            VARCHAR(50),    
+                    audience        VARCHAR(100),                      
+                    country_code    VARCHAR(5),     
+                    language        VARCHAR(20),                       
+                    posts_per_week  INTEGER DEFAULT 3,
+                    created_at      TIMESTAMP DEFAULT NOW(),
+                    updated_at      TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS events_cache (
+                    id           SERIAL PRIMARY KEY,
+                    country_code VARCHAR(5),
+                    event_name   VARCHAR(200),
+                    event_date   DATE,
+                    event_type   VARCHAR(50),     -- national, religious, global
+                    raw_data     JSONB,
+                    fetched_at   TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS trends_cache (
+                    id           SERIAL PRIMARY KEY,
+                    country_code VARCHAR(5),
+                    platform     VARCHAR(50),     -- google, instagram, general
+                    topic        VARCHAR(200),
+                    score        FLOAT,           -- how trending (higher = more trending)
+                    raw_data     JSONB,
+                    fetched_at   TIMESTAMP DEFAULT NOW()
+                );
+            """)
+
         conn.commit()
         print("✅ All tables created")
     except Exception as e:
@@ -318,7 +358,6 @@ def get_posts_by_status(user_id, status):
 # ================================================================
 
 def create_post_targets(scheduled_post_id, platforms: list):
-    """Create one row per platform for a scheduled post"""
     for platform in platforms:
         execute_query(
             "INSERT INTO post_targets (scheduled_post_id, platform) VALUES (%s, %s)",

@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 from dotenv import load_dotenv
 import os
 
@@ -39,6 +40,10 @@ celery_app.conf.beat_schedule = {
     "check-expired-every-minute": {
         "task"    : "tasks.expiry_checker_task",
         "schedule": 60.0, 
+    },
+    "daily-ai-post-generation": {
+        "task"    : "tasks.generate_ai_posts_task",
+        "schedule": crontab(hour=8, minute=0)
     },
 
 }
