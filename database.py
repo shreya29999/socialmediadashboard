@@ -123,9 +123,16 @@ def create_schema():
                     status                  VARCHAR(50) DEFAULT 'scheduled',
                     approved_at             TIMESTAMP,
                     rejection_reason        TEXT,
+                    ai_generated            BOOLEAN DEFAULT FALSE,
+                    trigger_type            VARCHAR(50),
+                    trigger_name            VARCHAR(200),
                     created_at              TIMESTAMP DEFAULT NOW()
                 );
             """)
+            cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS ai_generated BOOLEAN DEFAULT FALSE;")
+            cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS trigger_type VARCHAR(50);")
+            cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS trigger_name VARCHAR(200);")
+
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS post_targets (
                     id                  SERIAL PRIMARY KEY,
@@ -243,7 +250,6 @@ def update_access_token(account_id, new_token, new_expiry):
         (new_token, new_expiry, account_id)
     )
 
-
 # ================================================================
 # SECTION 5 — POST TEMPLATE QUERIES
 # ================================================================
@@ -302,7 +308,8 @@ def create_scheduled_post(template_id, scheduled_at):
 
 def get_post_by_id(post_id):
     return execute_query("""
-        SELECT sp.*, pt.content_text, pt.media_url, pt.platforms, pt.user_id
+        SELECT sp.*, pt.content_text, pt.media_url, pt.platforms, pt.user_id,
+               sp.ai_generated, sp.trigger_type, sp.trigger_name
         FROM scheduled_posts sp
         JOIN post_templates pt ON sp.template_id = pt.id
         WHERE sp.id = %s
@@ -320,7 +327,6 @@ def get_posts_due_for_confirmation():
     """, fetch="all")
 
 def get_expired_awaiting_posts():
-    """Posts still awaiting approval but scheduled time has passed"""
     return execute_query("""
         SELECT * FROM scheduled_posts
         WHERE status = 'awaiting_approval'
@@ -345,7 +351,8 @@ def get_posts_for_calendar(user_id, start_date, end_date):
 
 def get_posts_by_status(user_id, status):
     return execute_query("""
-        SELECT sp.*, pt.content_text, pt.platforms
+        SELECT sp.*, pt.content_text, pt.platforms, pt.media_url,
+               sp.ai_generated, sp.trigger_type, sp.trigger_name
         FROM scheduled_posts sp
         JOIN post_templates pt ON sp.template_id = pt.id
         WHERE pt.user_id = %s AND sp.status = %s
@@ -417,3 +424,4 @@ def reject_post(post_id, reason=None):
             token_used = TRUE
         WHERE id = %s
     """, (reason, post_id))
+

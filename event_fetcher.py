@@ -52,7 +52,6 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
             if not holidays:
                 print(f"⚠️ No holidays returned for {country_code}: {data}")
                 return []
-
             execute_query(
                 "DELETE FROM events_cache WHERE country_code = %s",
                 (country_code,)
@@ -131,7 +130,7 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
     for url in rss_urls:
         try:
             feed = feedparser.parse(url)
-            for entry in feed.entries[:5]:   # top 5 from each feed
+            for entry in feed.entries[:5]:  
                 title = entry.get("title", "").strip()
                 if title and title not in topics:
                     topics.append(title)
@@ -163,11 +162,96 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
 
 # SECTION 3 — RELEVANCE FILTER (Groq)
 
+EXCLUDED_EVENT_TYPES = {
+    "religious",
+    "observance",      
+    "national",         
+}
+
+BASE_EXCLUDED_KEYWORDS = [
+    # religion
+    "christmas", "easter", "ramadan", "eid", "diwali", "hanukkah", "passover",
+    "good friday", "navratri", "puja", "church", "mosque", "temple", "holy",
+    "saint", "prophet", "religious", "pilgrimage", "hajj", "yom kippur",
+    # politics
+    "election", "president", "minister", "parliament", "senate", "congress",
+    "political", "protest", "referendum", "coup", "rebellion", "uprising",
+    "vote", "campaign", "party leader", "republic day", "independence day",
+    "constitution day",
+    # violence
+    "war", "attack", "shooting", "bombing", "terror", "assassination",
+    "riot", "violence", "killed", "massacre", "conflict", "military strike",
+]
+
+INDUSTRY_EXTRA_KEYWORDS = {
+    "tech": [
+        "martyr", "war memorial", "armed forces", "military",
+    ],
+}
+
+def _is_blocked(text: str, industry: str) -> bool:
+    if not text:
+        return False
+    text_lower = text.lower()
+    keywords = BASE_EXCLUDED_KEYWORDS + INDUSTRY_EXTRA_KEYWORDS.get(
+        (industry or "").lower(), []
+    )
+    return any(kw in text_lower for kw in keywords)
+
+def _prefilter_events(events: list, industry: str) -> list:
+    safe = []
+    for e in events or []:
+        event_type = (e.get("event_type") or "").lower()
+        if event_type in EXCLUDED_EVENT_TYPES:
+            print(f"🚫 Excluded event (type={event_type}): {e.get('event_name')}")
+            continue
+        if _is_blocked(e.get("event_name", ""), industry):
+            print(f"🚫 Excluded event (keyword match): {e.get('event_name')}")
+            continue
+        safe.append(e)
+    return safe
+
+
+def _prefilter_trends(trends: list, industry: str) -> list:
+    safe = []
+    for t in trends or []:
+        if _is_blocked(t.get("topic", ""), industry):
+            print(f"🚫 Excluded trend (keyword match): {t.get('topic')}")
+            continue
+        safe.append(t)
+    return safe
+
+
+def _postfilter_groq_output(result: dict, industry: str) -> dict:
+    clean_events = []
+    for e in result.get("relevant_events", []):
+        if _is_blocked(e.get("event_name", ""), industry) or _is_blocked(
+            e.get("angle", ""), industry
+        ):
+            print(f"🚫 Post-filter dropped event: {e.get('event_name')}")
+            continue
+        clean_events.append(e)
+
+    clean_trends = []
+    for t in result.get("relevant_trends", []):
+        if _is_blocked(t.get("topic", ""), industry) or _is_blocked(
+            t.get("angle", ""), industry
+        ):
+            print(f"🚫 Post-filter dropped trend: {t.get('topic')}")
+            continue
+        clean_trends.append(t)
+
+    return {"relevant_events": clean_events, "relevant_trends": clean_trends}
+
+
 def filter_relevant_events(
     events  : list,
     trends  : list,
     profile : dict
 ) -> dict:
+    industry = profile.get("industry", "")
+    events = _prefilter_events(events, industry)
+    trends = _prefilter_trends(trends, industry)
     if not events and not trends:
         return {"relevant_events": [], "relevant_trends": []}
 
@@ -195,8 +279,14 @@ Upcoming events (next 30 days):
 Currently trending topics:
 {chr(10).join(trends_list) if trends_list else "None"}
 
+STRICT CONTENT RULES (apply to every event/trend you select AND to the angle you write):
+- Do NOT select or reference anything religious (festivals, religious holidays, religious figures, places of worship).
+- Do NOT select or reference anything political (elections, politicians, parties, protests, government policy debates).
+- Do NOT select or reference anything violent, tragic, or related to war, conflict, attacks, or death.
+- If nothing qualifies, return empty lists. Do not force a selection.
+
 Select maximum 3 events AND maximum 3 trends most relevant 
-for this user. For each, give a specific post angle.
+for this user, respecting the rules above. For each, give a specific post angle.
 
 Return ONLY valid JSON, no explanation, no markdown:
 {{
@@ -224,11 +314,12 @@ Return ONLY valid JSON, no explanation, no markdown:
         )
         raw  = response.choices[0].message.content.strip()
         raw  = raw.replace("```json", "").replace("```", "").strip()
-        return json.loads(raw)
+        result = json.loads(raw)
 
     except Exception as e:
         print(f"❌ Groq relevance filter failed: {e}")
         return {"relevant_events": [], "relevant_trends": []}
+    return _postfilter_groq_output(result, industry)
 
 
 # SECTION 4 — POST GENERATOR (Groq)
@@ -239,7 +330,7 @@ def generate_post_content(
     platform : str
 ) -> str:
     platform_rules = {
-        "linkedin"  : "Professional tone. Max 3 hashtags. Under 700 characters.",
+        "linkedin"  : "Professional tone. Max 5 hashtags. Under 700 characters.",
         "instagram" : "Engaging, visual feel. 5-10 hashtags. Under 400 characters.",
         "facebook"  : "Conversational, community feel. 2-3 hashtags. Under 500 characters."
     }
@@ -296,67 +387,105 @@ async def run_recommendation_pipeline(user_id: int) -> list:
         return []
 
     country_code = profile.get("country_code", "IN")
-    platforms    = profile.get("platforms") or ["linkedin"]
-    events = await fetch_holidays(country_code)
-    trends = fetch_google_trends(country_code, profile.get("industry", "business"))
+    connected = execute_query(
+        "SELECT platform FROM social_accounts WHERE user_id = %s",
+        (user_id,), fetch="all"
+    )
+    platforms = [r["platform"] for r in connected] if connected else ["linkedin"]
+    print(f"📱 Platforms for user {user_id}: {platforms}")
+    events   = await fetch_holidays(country_code)
+    trends   = fetch_google_trends(country_code, profile.get("industry", "business"))
     relevant = filter_relevant_events(events, trends, profile)
     generated_posts = []
     days_offset     = 0
     for event in relevant.get("relevant_events", []):
-        for platform in platforms:
-            content = generate_post_content(
-                profile  = profile,
-                trigger  = {
-                    "type" : "event",
-                    "name" : event["event_name"],
-                    "angle": event["angle"]
-                },
-                platform = platform
-            )
-            if not content:
-                continue
-            try:
-                event_date   = datetime.strptime(event["event_date"], "%Y-%m-%d")
-                scheduled_at = event_date - timedelta(days=3)
-                scheduled_at = scheduled_at.replace(
-                    hour=9, minute=0, second=0, tzinfo=timezone.utc
-                )
-            except Exception:
-                scheduled_at = datetime.now(timezone.utc) + timedelta(days=days_offset + 1)
+        already_exists = execute_query("""
+            SELECT sp.id FROM scheduled_posts sp
+            JOIN post_templates pt ON sp.template_id = pt.id
+            WHERE pt.user_id = %s
+            AND pt.content_text ILIKE %s
+            AND sp.created_at::date = CURRENT_DATE
+            LIMIT 1
+        """, (user_id, f"%{event['event_name'][:20]}%"), fetch="one")
 
-            generated_posts.append({
-                "content_text" : content,
-                "platforms"    : [platform],
-                "scheduled_at" : scheduled_at,
-                "trigger_type" : "event",
-                "trigger_name" : event["event_name"]
-            })
-            days_offset += 2
-    for trend in relevant.get("relevant_trends", []):
-        for platform in platforms:
-            content = generate_post_content(
-                profile  = profile,
-                trigger  = {
-                    "type" : "trend",
-                    "name" : trend["topic"],
-                    "angle": trend["angle"]
-                },
-                platform = platform
-            )
-            if not content:
-                continue
+        if already_exists:
+            print(f"⏭️ Skipping duplicate for event: {event['event_name']}")
+            continue
+        primary_platform = "linkedin" if "linkedin" in platforms else platforms[0]
+        content = generate_post_content(
+            profile  = profile,
+            trigger  = {
+                "type" : "event",
+                "name" : event["event_name"],
+                "angle": event["angle"]
+            },
+            platform = primary_platform
+        )
+        if not content:
+            continue
 
+        try:
+            event_date   = datetime.strptime(event["event_date"], "%Y-%m-%d")
+            scheduled_at = event_date - timedelta(days=3)
+            scheduled_at = scheduled_at.replace(
+                hour=9, minute=0, second=0, tzinfo=timezone.utc
+            )
+            if scheduled_at < datetime.now(timezone.utc):
+                scheduled_at = datetime.now(timezone.utc) + timedelta(days=1)
+                scheduled_at = scheduled_at.replace(hour=9, minute=0, second=0)
+        except Exception:
             scheduled_at = datetime.now(timezone.utc) + timedelta(days=days_offset + 1)
-            scheduled_at = scheduled_at.replace(hour=9, minute=0, second=0)
 
-            generated_posts.append({
-                "content_text" : content,
-                "platforms"    : [platform],
-                "scheduled_at" : scheduled_at,
-                "trigger_type" : "trend",
-                "trigger_name" : trend["topic"]
-            })
-            days_offset += 2
+        generated_posts.append({
+            "content_text" : content,
+            "platforms"    : platforms,  
+            "scheduled_at" : scheduled_at,
+            "trigger_type" : "event",
+            "trigger_name" : event["event_name"],
+            "media_url"    : None        
+        })
+        days_offset += 2
+
+    for trend in relevant.get("relevant_trends", []):
+
+        already_exists = execute_query("""
+            SELECT sp.id FROM scheduled_posts sp
+            JOIN post_templates pt ON sp.template_id = pt.id
+            WHERE pt.user_id = %s
+            AND pt.content_text ILIKE %s
+            AND sp.created_at::date = CURRENT_DATE
+            LIMIT 1
+        """, (user_id, f"%{trend['topic'][:20]}%"), fetch="one")
+
+        if already_exists:
+            print(f"⏭️ Skipping duplicate for trend: {trend['topic']}")
+            continue
+
+        primary_platform = "linkedin" if "linkedin" in platforms else platforms[0]
+        content = generate_post_content(
+            profile  = profile,
+            trigger  = {
+                "type" : "trend",
+                "name" : trend["topic"],
+                "angle": trend["angle"]
+            },
+            platform = primary_platform
+        )
+        if not content:
+            continue
+
+        scheduled_at = datetime.now(timezone.utc) + timedelta(days=days_offset + 1)
+        scheduled_at = scheduled_at.replace(hour=9, minute=0, second=0)
+
+        generated_posts.append({
+            "content_text" : content,
+            "platforms"    : platforms,  
+            "scheduled_at" : scheduled_at,
+            "trigger_type" : "trend",
+            "trigger_name" : trend["topic"],
+            "media_url"    : None
+        })
+        days_offset += 2
 
     print(f"✅ Generated {len(generated_posts)} posts for user {user_id}")
     return generated_posts

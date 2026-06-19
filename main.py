@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Union
 from datetime import datetime, timezone
 import httpx
 import os
@@ -420,39 +420,50 @@ async def upload_media(
     file         : UploadFile = File(...),
     current_user : dict       = Depends(get_current_user)
 ):
+    allowed_images = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
+    allowed_videos = {"video/mp4", "video/mov", "video/quicktime", "video/avi", "video/mkv"}
+    allowed = allowed_images | allowed_videos
 
-    allowed = {"image/jpeg", "image/jpg", "image/png"}
     if file.content_type not in allowed:
-        raise HTTPException(status_code=400, detail="Only JPEG and PNG images are supported")
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, GIF, WebP images and MP4, MOV, AVI videos are supported")
 
-    contents = await file.read()
-    if len(contents) > 8 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File too large. Max size is 8MB")
+    contents = await file.read()    
+    is_video = file.content_type in allowed_videos
+    max_size = 650 * 1024 * 1024 if is_video else 8 * 1024 * 1024
+    if len(contents) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail=f"File too large. Max size is {'650MB for videos' if is_video else '8MB for images'}"
+        )
 
     try:
-        result = cloudinary.uploader.upload(
-            contents,
-            folder          = "socialdesk",
-            resource_type   = "image",
-            allowed_formats = ["jpg", "jpeg", "png"],
-            transformation  = [
-                {"width": 1080, "height": 1080, "crop": "limit"},  
+        upload_options = {
+            "folder"        : "socialdesk",
+            "resource_type" : "auto",   
+        }
+
+        if not is_video:
+            upload_options["transformation"] = [
+                {"width": 1080, "height": 1080, "crop": "limit"},
                 {"quality": "auto"},
-                {"fetch_format": "jpg"}  
+                {"fetch_format": "auto"}
             ]
-        )
+
+        result = cloudinary.uploader.upload(contents, **upload_options)
+
         return {
-            "success"    : True,
-            "url"        : result["secure_url"],
-            "public_id"  : result["public_id"],
-            "width"      : result.get("width"),
-            "height"     : result.get("height"),
-            "format"     : result.get("format"),
-            "size_bytes" : result.get("bytes")
+            "success"      : True,
+            "url"          : result["secure_url"],
+            "public_id"    : result["public_id"],
+            "resource_type": result.get("resource_type"), 
+            "format"       : result.get("format"),
+            "width"        : result.get("width"),
+            "height"       : result.get("height"),
+            "duration"     : result.get("duration"),       
+            "size_bytes"   : result.get("bytes")
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
 
 # ── SECTION 5 — POST ROUTES ─────────────────────────────
 
@@ -476,24 +487,25 @@ class UpdatePostRequest(BaseModel):
 
 
 class UserProfileRequest(BaseModel):
-    persona        : str           
-    industry       : str           
-    brand_name     : str           
-    tone           : str           
-    audience       : str           
-    country_code   : str           
+    persona        : str
+    industry       : Union[str, List[str]]
+    brand_name     : str
+    tone           : Union[str, List[str]]
+    audience       : Union[str, List[str]]
+    country_code   : str
     language       : str = "english"
     posts_per_week : int = 3
 
 
-
 @app.post("/user/profile")
 def save_user_profile(req: UserProfileRequest, current_user: dict = Depends(get_current_user)):
+    industry = req.industry if isinstance(req.industry, str) else ", ".join(req.industry)
+    tone     = req.tone     if isinstance(req.tone,     str) else ", ".join(req.tone)
+    audience = req.audience if isinstance(req.audience, str) else ", ".join(req.audience)
     execute_query("""
         INSERT INTO user_profiles 
             (user_id, persona, industry, brand_name, tone, audience, country_code, language, posts_per_week)
-        VALUES 
-            (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (user_id) DO UPDATE SET
             persona        = EXCLUDED.persona,
             industry       = EXCLUDED.industry,
@@ -505,12 +517,11 @@ def save_user_profile(req: UserProfileRequest, current_user: dict = Depends(get_
             posts_per_week = EXCLUDED.posts_per_week,
             updated_at     = NOW()
     """, (
-        current_user["user_id"], req.persona, req.industry,
-        req.brand_name, req.tone, req.audience,
+        current_user["user_id"], req.persona, industry,
+        req.brand_name, tone, audience,
         req.country_code, req.language, req.posts_per_week
     ))
     return {"message": "Profile saved ✅"}
-
 
 @app.get("/user/profile")
 def get_user_profile(current_user: dict = Depends(get_current_user)):
@@ -850,7 +861,6 @@ def get_calendar(month: str = Query(..., description="Format: YYYY-MM"), current
 
 
 from tasks import generate_ai_posts_task
-
 @app.post("/ai/generate")
 def trigger_ai_generation(current_user: dict = Depends(get_current_user)):
     """Manually trigger AI post generation for testing."""

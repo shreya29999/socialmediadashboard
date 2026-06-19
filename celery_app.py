@@ -35,15 +35,15 @@ celery_app.conf.update(
 celery_app.conf.beat_schedule = {
     "send-confirmations-every-minute": {
         "task"    : "tasks.send_confirmation_task",
-        "schedule": 60.0, 
+        "schedule": 60.0,
     },
     "check-expired-every-minute": {
         "task"    : "tasks.expiry_checker_task",
-        "schedule": 60.0, 
+        "schedule": 60.0,
     },
     "daily-ai-post-generation": {
-        "task"    : "tasks.generate_ai_posts_task",
-        "schedule": crontab(hour=8, minute=0)
+        "task"    : "tasks.generate_ai_posts_for_all_users",  # ← fixed
+        "schedule": crontab(hour=8, minute=0),
+        "options" : {"expires": 3600}
     },
-
 }

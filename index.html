@@ -524,16 +524,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       <div class="quest-card">
         <h3><span>🏢</span> What's your industry?</h3>
         <div class="option-grid cols-3">
-          <button class="option-btn" onclick="selectOption(this,'industry','tech')"><span class="opt-icon">💻</span><span class="opt-label">Tech</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','fashion')"><span class="opt-icon">👗</span><span class="opt-label">Fashion</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','food')"><span class="opt-icon">🍽️</span><span class="opt-label">Food</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','finance')"><span class="opt-icon">💰</span><span class="opt-label">Finance</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','health')"><span class="opt-icon">🏥</span><span class="opt-label">Health</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','education')"><span class="opt-icon">📚</span><span class="opt-label">Education</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','marketing')"><span class="opt-icon">📊</span><span class="opt-label">Marketing</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','retail')"><span class="opt-icon">🛍️</span><span class="opt-label">Retail</span></button>
-          <button class="option-btn" onclick="selectOption(this,'industry','other')"><span class="opt-icon">🌐</span><span class="opt-label">Other</span></button>
-        </div>
+        <button class="option-btn" data-value="tech" onclick="multiSelectOption(this,'industry','tech')"><span class="opt-icon">💻</span><span class="opt-label">Tech</span></button>
+        <button class="option-btn" data-value="fashion" onclick="multiSelectOption(this,'industry','fashion')"><span class="opt-icon">👗</span><span class="opt-label">Fashion</span></button>
+        <button class="option-btn" data-value="food" onclick="multiSelectOption(this,'industry','food')"><span class="opt-icon">🍽️</span><span class="opt-label">Food</span></button>
+        <button class="option-btn" data-value="finance" onclick="multiSelectOption(this,'industry','finance')"><span class="opt-icon">💰</span><span class="opt-label">Finance</span></button>
+        <button class="option-btn" data-value="health" onclick="multiSelectOption(this,'industry','health')"><span class="opt-icon">🏥</span><span class="opt-label">Health</span></button>
+        <button class="option-btn" data-value="education" onclick="multiSelectOption(this,'industry','education')"><span class="opt-icon">📚</span><span class="opt-label">Education</span></button>
+        <button class="option-btn" data-value="marketing" onclick="multiSelectOption(this,'industry','marketing')"><span class="opt-icon">📊</span><span class="opt-label">Marketing</span></button>
+        <button class="option-btn" data-value="retail" onclick="multiSelectOption(this,'industry','retail')"><span class="opt-icon">🛍️</span><span class="opt-label">Retail</span></button>
+        <button class="option-btn" data-value="other" onclick="multiSelectOption(this,'industry','other')"><span class="opt-icon">🌐</span><span class="opt-label">Other</span></button>
+      </div>
       </div>
 
       <!-- Brand name -->
@@ -546,40 +546,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       <div class="quest-card">
         <h3><span>🎙️</span> How should your posts sound?</h3>
         <div class="option-grid">
-          <button class="option-btn" onclick="selectOption(this,'tone','professional')">
-            <span class="opt-icon">🤝</span>
-            <span class="opt-label">Professional</span>
-            <span class="opt-desc">Formal, authoritative</span>
-          </button>
-          <button class="option-btn" onclick="selectOption(this,'tone','casual')">
-            <span class="opt-icon">😊</span>
-            <span class="opt-label">Casual & Friendly</span>
-            <span class="opt-desc">Warm, approachable</span>
-          </button>
-          <button class="option-btn" onclick="selectOption(this,'tone','inspirational')">
-            <span class="opt-icon">🌟</span>
-            <span class="opt-label">Inspirational</span>
-            <span class="opt-desc">Motivating, uplifting</span>
-          </button>
-          <button class="option-btn" onclick="selectOption(this,'tone','witty')">
-            <span class="opt-icon">😄</span>
-            <span class="opt-label">Witty & Humorous</span>
-            <span class="opt-desc">Playful, entertaining</span>
-          </button>
-        </div>
+        <button class="option-btn" data-value="professional" onclick="multiSelectOption(this,'tone','professional')">
+          <span class="opt-icon">🤝</span>
+          <span class="opt-label">Professional</span>
+          <span class="opt-desc">Formal, authoritative</span>
+        </button>
+        <button class="option-btn" data-value="casual" onclick="multiSelectOption(this,'tone','casual')">
+          <span class="opt-icon">😊</span>
+          <span class="opt-label">Casual & Friendly</span>
+          <span class="opt-desc">Warm, approachable</span>
+        </button>
+        <button class="option-btn" data-value="inspirational" onclick="multiSelectOption(this,'tone','inspirational')">
+          <span class="opt-icon">🌟</span>
+          <span class="opt-label">Inspirational</span>
+          <span class="opt-desc">Motivating, uplifting</span>
+        </button>
+        <button class="option-btn" data-value="witty" onclick="multiSelectOption(this,'tone','witty')">
+          <span class="opt-icon">😄</span>
+          <span class="opt-label">Witty & Humorous</span>
+          <span class="opt-desc">Playful, entertaining</span>
+        </button>
+      </div>
       </div>
 
       <!-- Audience -->
       <div class="quest-card">
         <h3><span>🎯</span> Who is your target audience?</h3>
         <div class="option-grid">
-          <button class="option-btn" onclick="selectOption(this,'audience','professionals')"><span class="opt-label">Working Professionals</span></button>
-          <button class="option-btn" onclick="selectOption(this,'audience','students')"><span class="opt-label">Students</span></button>
-          <button class="option-btn" onclick="selectOption(this,'audience','job seekers')"><span class="opt-label">Job Seekers</span></button>
-          <button class="option-btn" onclick="selectOption(this,'audience','entrepreneurs')"><span class="opt-label">Entrepreneurs</span></button>
-          <button class="option-btn" onclick="selectOption(this,'audience','consumers')"><span class="opt-label">General Consumers</span></button>
-          <button class="option-btn" onclick="selectOption(this,'audience','b2b')"><span class="opt-label">B2B / Businesses</span></button>
-        </div>
+        <button class="option-btn" data-value="professionals" onclick="multiSelectOption(this,'audience','professionals')"><span class="opt-label">Working Professionals</span></button>
+        <button class="option-btn" data-value="students" onclick="multiSelectOption(this,'audience','students')"><span class="opt-label">Students</span></button>
+        <button class="option-btn" data-value="job seekers" onclick="multiSelectOption(this,'audience','job seekers')"><span class="opt-label">Job Seekers</span></button>
+        <button class="option-btn" data-value="entrepreneurs" onclick="multiSelectOption(this,'audience','entrepreneurs')"><span class="opt-label">Entrepreneurs</span></button>
+        <button class="option-btn" data-value="consumers" onclick="multiSelectOption(this,'audience','consumers')"><span class="opt-label">General Consumers</span></button>
+        <button class="option-btn" data-value="b2b" onclick="multiSelectOption(this,'audience','b2b')"><span class="opt-label">B2B / Businesses</span></button>
+      </div>
       </div>
 
       <!-- Country + Language -->
@@ -725,35 +725,62 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
       <!-- Media Upload -->
       <div id="media-row" style="display:none;margin-top:10px;flex-direction:column;gap:8px;">
-        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">Image <span style="color:var(--danger-text);">*</span> <span style="font-weight:400;text-transform:none;letter-spacing:0;">— optional</span></div>
+        <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;">
+          Image / Video <span style="font-weight:400;text-transform:none;letter-spacing:0;">— optional</span>
+        </div>
         <div style="display:flex;gap:6px;">
           <button type="button" id="media-tab-upload" onclick="switchMediaTab('upload')" style="font-size:12px;padding:5px 14px;border-radius:7px;border:1px solid var(--text);background:var(--text);color:#fff;cursor:pointer;font-family:inherit;font-weight:500;">📁 Upload file</button>
           <button type="button" id="media-tab-url" onclick="switchMediaTab('url')" style="font-size:12px;padding:5px 14px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-family:inherit;font-weight:500;">🔗 Paste URL</button>
         </div>
+
         <div id="media-panel-upload">
-          <div id="media-dropzone" onclick="document.getElementById('media-file-input').click()" ondragover="event.preventDefault()" ondrop="handleMediaDrop(event)" style="border:2px dashed var(--border-strong);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:#fafaf8;">
-            <div style="font-size:24px;margin-bottom:6px;">🖼️</div>
+          <!-- Dropzone -->
+          <div id="media-dropzone"
+            onclick="document.getElementById('media-file-input').click()"
+            ondragover="event.preventDefault();this.style.borderColor='var(--text)'"
+            ondragleave="this.style.borderColor='var(--border-strong)'"
+            ondrop="handleMediaDrop(event)"
+            style="border:2px dashed var(--border-strong);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;background:#fafaf8;">
+            <div style="font-size:24px;margin-bottom:6px;">🖼️📹</div>
             <div style="font-size:13px;color:var(--text-muted);">Click to upload or drag & drop</div>
-            <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">JPEG, PNG — max 8MB</div>
+            <div style="font-size:11px;color:var(--text-faint);margin-top:4px;">Images: JPEG, PNG, GIF, WebP (max 8MB) · Videos: MP4, MOV (max 650MB)</div>
           </div>
-          <input type="file" id="media-file-input" accept="image/jpeg,image/png,image/jpg" style="display:none;" onchange="handleMediaFileSelect(event)">
+
+          <!-- File input -->
+          <input type="file" id="media-file-input"
+            accept="image/jpeg,image/png,image/jpg,image/gif,image/webp,video/mp4,video/mov,video/quicktime,video/avi"
+            style="display:none;" onchange="handleMediaFileSelect(event)">
+
+          <!-- Upload progress -->
           <div id="media-upload-progress" style="display:none;margin-top:8px;">
             <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);">
               <div class="spinner" style="width:16px;height:16px;border-width:2px;"></div>
               <span id="media-upload-status">Uploading...</span>
             </div>
           </div>
-          <div id="media-preview" style="display:none;margin-top:8px;position:relative;display:inline-block;">
-            <img id="media-preview-img" src="" alt="preview" style="max-height:120px;max-width:100%;border-radius:var(--radius);border:1px solid var(--border);">
-            <button type="button" onclick="clearMedia()" style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--danger-text);color:#fff;border:none;cursor:pointer;font-size:12px;">✕</button>
+
+          <!-- Preview -->
+          <div id="media-preview" style="display:none;margin-top:8px;position:relative;">
+            <img id="media-preview-img" src="" alt="preview"
+              style="max-height:120px;max-width:100%;border-radius:var(--radius);border:1px solid var(--border);display:none;">
+            <button type="button" onclick="clearMedia()"
+              style="position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:var(--danger-text);color:#fff;border:none;cursor:pointer;font-size:12px;">✕</button>
           </div>
         </div>
+
+        <!-- URL panel -->
         <div id="media-panel-url" style="display:none;">
-          <input type="url" id="ig-image-url" placeholder="https://example.com/image.jpg" class="compose-select" style="width:100%;" oninput="handleUrlInput(this.value)">
+          <input type="url" id="ig-image-url"
+            placeholder="https://example.com/image.jpg or video URL"
+            class="compose-select" style="width:100%;"
+            oninput="handleUrlInput(this.value)">
           <div id="url-preview" style="display:none;margin-top:8px;">
-            <img id="url-preview-img" src="" alt="preview" style="max-height:120px;border-radius:var(--radius);border:1px solid var(--border);" onerror="document.getElementById('url-preview').style.display='none'">
+            <img id="url-preview-img" src="" alt="preview"
+              style="max-height:120px;border-radius:var(--radius);border:1px solid var(--border);"
+              onerror="document.getElementById('url-preview').style.display='none'">
           </div>
         </div>
+
         <input type="hidden" id="media-final-url" value="">
       </div>
 
@@ -914,10 +941,16 @@ let state = {
 };
 
 // Questionnaire data
+
 let questData = {
-  persona: '', industry: '', brand_name: '',
-  tone: '', audience: '', country_code: 'IN',
-  language: 'english', posts_per_week: 3
+  persona      : '',
+  industry     : [],   
+  brand_name   : '',
+  tone         : [],   
+  audience     : [],   
+  country_code : 'IN',
+  language     : 'english',
+  posts_per_week: 3
 };
 
 function saveState() { try { sessionStorage.setItem('sd_state', JSON.stringify(state)); } catch(e) {} }
@@ -1057,6 +1090,14 @@ function selectOption(btn, field, value) {
   questData[field] = value;
 }
 
+function multiSelectOption(btn, field, value) {
+  btn.classList.toggle('selected');
+  const grid = btn.closest('.option-grid');
+  const selected = [...grid.querySelectorAll('.option-btn.selected')]
+    .map(b => b.getAttribute('data-value'));
+  questData[field] = selected;
+}
+
 function goToQuestionnaire() {
   showScreen('screen-questionnaire');
 }
@@ -1064,31 +1105,50 @@ function goToQuestionnaire() {
 async function saveProfile() {
   const errEl = document.getElementById('quest-error');
   errEl.style.display = 'none';
-  // Validate required fields
+
   const missing = [];
   if (!questData.persona) missing.push('who you are');
-  if (!questData.industry) missing.push('your industry');
-  if (!questData.brand_name.trim()) missing.push('your brand name');
-  if (!questData.tone) missing.push('your tone');
-  if (!questData.audience) missing.push('your audience');
-  if (missing.length) { errEl.textContent=`Please select: ${missing.join(', ')}`; errEl.style.display='block'; return; }
+  if (!questData.industry.length) missing.push('your industry');
+  if (!document.getElementById('q-brand-name').value.trim()) missing.push('your brand name');
+  if (!questData.tone.length) missing.push('your tone');
+  if (!questData.audience.length) missing.push('your audience');
+  if (missing.length) { 
+    errEl.textContent = `Please select: ${missing.join(', ')}`;
+    errEl.style.display = 'block'; 
+    return; 
+  }
 
   const btn = document.getElementById('btn-save-profile');
-  btn.disabled=true; btn.textContent='Saving...';
-  try {
-    questData.brand_name = document.getElementById('q-brand-name').value.trim() || questData.brand_name;
-    questData.country_code = document.getElementById('q-country').value;
-    questData.language = document.getElementById('q-language').value;
-    questData.posts_per_week = parseInt(document.getElementById('q-ppw').value);
+  btn.disabled = true; btn.textContent = 'Saving...';
 
-    await apiPost('/user/profile', questData);
-    state.userProfile = { ...questData };
+  try {
+    const profileToSend = {
+      persona        : questData.persona,
+      industry       : questData.industry.join(', '),
+      brand_name     : document.getElementById('q-brand-name').value.trim(),
+      tone           : questData.tone.join(', '),
+      audience       : questData.audience.join(', '),
+      country_code   : document.getElementById('q-country').value,
+      language       : document.getElementById('q-language').value,
+      posts_per_week : parseInt(document.getElementById('q-ppw').value)
+    };
+
+    await apiPost('/user/profile', profileToSend);
+    state.userProfile = { ...profileToSend };
     saveState();
     toast('Profile saved ✅ AI will now generate posts for you!');
     goDashboard();
-  } catch(e) { errEl.textContent=e.message; errEl.style.display='block'; }
-  finally { btn.disabled=false; btn.textContent='Save & go to dashboard →'; }
+  } catch(e) { 
+    errEl.textContent = e.message; 
+    errEl.style.display = 'block'; 
+  }
+  finally { 
+    btn.disabled = false; 
+    btn.textContent = 'Save & go to dashboard →'; 
+  }
 }
+
+
 
 async function loadUserProfile() {
   if (!state.token) return;
@@ -1336,7 +1396,7 @@ async function schedulePost() {
   const platforms=[fb&&'facebook',ig&&'instagram',li&&'linkedin'].filter(Boolean);
   const mediaUrl=document.getElementById('media-final-url').value.trim();
   const recurrenceVal=document.getElementById('recurrence').value;
-  if (ig&&!mediaUrl) { toast('Instagram requires an image.'); return; }
+  if (ig && !mediaUrl) { toast('Instagram requires an image or video.'); return; }
   const recurrenceMap={'ONE_TIME':'ONE_TIME','EVERY_2_DAYS':'EVERY_X_DAYS','WEEKLY':'WEEKLY','MONTHLY':'MONTHLY'};
   const btn=document.getElementById('btn-schedule');
   btn.disabled=true; btn.textContent='Scheduling...';
@@ -1373,7 +1433,8 @@ async function loadPostsFromBackend() {
       createdAt: p.created_at||p.scheduled_at,
       ai_generated: p.ai_generated||false,
       trigger_type: p.trigger_type||null,
-      trigger_name: p.trigger_name||null
+      trigger_name: p.trigger_name||null,
+      media_url    : p.media_url || null
     }));
     saveState(); renderAll();
   } catch(e) { console.warn('Failed to load posts:', e); }
@@ -1498,35 +1559,83 @@ function switchMediaTab(tab){
 }
 function handleMediaDrop(e){e.preventDefault();const file=e.dataTransfer.files[0];if(file)uploadMediaFile(file);}
 function handleMediaFileSelect(e){const file=e.target.files[0];if(file)uploadMediaFile(file);}
-async function uploadMediaFile(file){
-  if(!['image/jpeg','image/jpg','image/png'].includes(file.type)){toast('❌ Only JPEG and PNG supported');return;}
-  if(file.size>8*1024*1024){toast('❌ Image must be under 8MB');return;}
-  document.getElementById('media-dropzone').style.display='none';
-  document.getElementById('media-upload-progress').style.display='flex';
-  document.getElementById('media-preview').style.display='none';
-  document.getElementById('media-upload-status').textContent='Uploading...';
-  const formData=new FormData(); formData.append('file',file);
+
+
+async function uploadMediaFile(file) {
+  const allowedTypes = [
+    'image/jpeg','image/jpg','image/png','image/gif','image/webp',
+    'video/mp4','video/mov','video/quicktime','video/avi'
+  ];
+  if (!allowedTypes.includes(file.type)) {
+    toast('❌ Only images and videos are supported'); return;
+  }
+
+  const isVideo = file.type.startsWith('video/');
+  const maxSize = isVideo ? 650 * 1024 * 1024 : 8 * 1024 * 1024;
+  if (file.size > maxSize) {
+    toast(`❌ File too large. Max ${isVideo ? '650MB for videos' : '8MB for images'}`);
+    return;
+  }
+
+  // Show different preview for video
+  document.getElementById('media-dropzone').style.display = 'none';
+  document.getElementById('media-upload-progress').style.display = 'flex';
+  document.getElementById('media-upload-status').textContent = 
+    isVideo ? 'Uploading video... this may take a moment' : 'Uploading...';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
   try {
-    const res=await apiRequest('/media/upload',{method:'POST',body:formData});
-    const url=res.url||res.secure_url;
-    if(!url) throw new Error('Upload response invalid');
-    document.getElementById('media-final-url').value=url;
-    document.getElementById('media-upload-progress').style.display='none';
-    document.getElementById('media-preview').style.display='inline-block';
-    document.getElementById('media-preview-img').src=url;
-    toast('✅ Image uploaded!');
-  } catch(e){
-    document.getElementById('media-upload-progress').style.display='none';
-    document.getElementById('media-dropzone').style.display='block';
-    toast('❌ Upload failed: '+e.message);
+    const res = await apiRequest('/media/upload', { method: 'POST', body: formData });
+    const url = res.url || res.secure_url;
+    if (!url) throw new Error('Upload response invalid');
+
+    document.getElementById('media-final-url').value = url;
+    document.getElementById('media-upload-progress').style.display = 'none';
+
+    // Show video or image preview
+    if (isVideo) {
+      document.getElementById('media-preview').style.display = 'inline-block';
+      document.getElementById('media-preview-img').style.display = 'none';
+      
+      // Add video preview element if not exists
+      let videoPreview = document.getElementById('media-preview-video');
+      if (!videoPreview) {
+        videoPreview = document.createElement('video');
+        videoPreview.id = 'media-preview-video';
+        videoPreview.controls = true;
+        videoPreview.style.cssText = 'max-height:120px;max-width:100%;border-radius:var(--radius);border:1px solid var(--border);';
+        document.getElementById('media-preview').appendChild(videoPreview);
+      }
+      videoPreview.src = url;
+      videoPreview.style.display = 'block';
+    } else {
+      document.getElementById('media-preview').style.display = 'inline-block';
+      document.getElementById('media-preview-img').style.display = 'block';
+      document.getElementById('media-preview-img').src = url;
+      const vp = document.getElementById('media-preview-video');
+      if (vp) vp.style.display = 'none';
+    }
+
+    toast(`✅ ${isVideo ? 'Video' : 'Image'} uploaded successfully!`);
+  } catch(e) {
+    document.getElementById('media-upload-progress').style.display = 'none';
+    document.getElementById('media-dropzone').style.display = 'block';
+    toast('❌ Upload failed: ' + e.message);
   }
 }
-function clearMedia(){
-  document.getElementById('media-final-url').value='';
-  document.getElementById('media-preview').style.display='none';
-  document.getElementById('media-dropzone').style.display='block';
-  document.getElementById('media-file-input').value='';
+
+function clearMedia() {
+  document.getElementById('media-final-url').value = '';
+  document.getElementById('media-preview').style.display = 'none';
+  document.getElementById('media-dropzone').style.display = 'block';
+  document.getElementById('media-file-input').value = '';
+  document.getElementById('media-preview-img').style.display = 'none';
+  const vp = document.getElementById('media-preview-video');
+  if (vp) { vp.src = ''; vp.style.display = 'none'; }
 }
+
 function handleUrlInput(val){
   document.getElementById('media-final-url').value=val;
   const preview=document.getElementById('url-preview');

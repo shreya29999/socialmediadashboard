@@ -207,27 +207,44 @@ def publish_post_task(self, post_id: int):
         update_post_status(post_id, "failed")
         raise self.retry(exc=e)
 
-
 def _publish_to_facebook(post: dict, access_token: str) -> dict:
     import httpx
     from database import get_social_account
 
     account = get_social_account(post["user_id"], "facebook")
     page_id = account["page_id"]
+    media_url = post.get("media_url")
+    is_video  = _is_video_url(media_url)
 
     for attempt in range(3):
         try:
-            if post.get("media_url"):
+            if media_url and is_video:
+                # ── Video post ──
+                print(f"🎥 Facebook: posting video")
+                response = httpx.post(
+                    f"https://graph.facebook.com/v18.0/{page_id}/videos",
+                    data={
+                        "file_url"     : media_url,
+                        "description"  : post["content_text"],
+                        "access_token" : access_token
+                    },
+                    timeout=60.0   # videos need more time
+                )
+            elif media_url:
+                # ── Image post ──
+                print(f"🖼️ Facebook: posting image")
                 response = httpx.post(
                     f"https://graph.facebook.com/v18.0/{page_id}/photos",
                     data={
-                        "url"          : post["media_url"],
+                        "url"          : media_url,
                         "caption"      : post["content_text"],
                         "access_token" : access_token
                     },
                     timeout=30.0
                 )
             else:
+                # ── Text only post ──
+                print(f"📝 Facebook: posting text only")
                 response = httpx.post(
                     f"https://graph.facebook.com/v18.0/{page_id}/feed",
                     data={
@@ -236,10 +253,12 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
                     },
                     timeout=30.0
                 )
+
             data = response.json()
             if "id" in data:
                 return {"success": True, "post_id": data["id"]}
-            print(f"❌ Facebook publish failed response: {data}")
+
+            print(f"❌ Facebook publish failed: {data}")
             return {
                 "success": False,
                 "error"  : data.get("error", {}).get("message", "Unknown Facebook error")
@@ -251,12 +270,10 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
                 time.sleep(2 ** attempt)
             else:
                 return {"success": False, "error": "Facebook API timed out after 3 attempts"}
-
         except Exception as e:
             return {"success": False, "error": str(e)}
 
     return {"success": False, "error": "Facebook: max retries exceeded"}
-
 
 
 def _publish_to_instagram(post: dict, access_token: str) -> dict:
@@ -265,30 +282,42 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
 
     account = get_social_account(post["user_id"], "instagram")
     if not account:
-        print("❌ Instagram: no account found in database")
         return {"success": False, "error": "Instagram account not connected"}
 
     ig_user_id = account["page_id"]
+    media_url  = post.get("media_url")
+    is_video   = _is_video_url(media_url)
 
-    if not post.get("media_url"):
-        print("⚠️ Instagram skipped: no image URL provided")
+    if not media_url:
         return {"success": False, "error": "Instagram requires an image or video URL"}
 
-    for attempt in range(3):  
+    for attempt in range(3):
         try:
-            print(f"📸 Instagram attempt {attempt + 1}/3 - creating container...")
-            container_response = httpx.post(
-                f"https://graph.facebook.com/v18.0/{ig_user_id}/media",
-                data={
+            if is_video:
+                print(f"🎥 Instagram attempt {attempt + 1}/3 - creating video container...")
+                container_data = {
                     "caption"      : post["content_text"],
-                    "image_url"    : post["media_url"],
+                    "video_url"    : media_url,
+                    "media_type"   : "REELS",         
+                    "share_to_feed": "true",
+                    "access_token" : access_token
+                }
+            else:
+                print(f"🖼️ Instagram attempt {attempt + 1}/3 - creating image container...")
+                container_data = {
+                    "caption"      : post["content_text"],
+                    "image_url"    : media_url,
                     "media_type"   : "IMAGE",
                     "access_token" : access_token
-                },
-                timeout=30.0
+                }
+
+            container_response = httpx.post(
+                f"https://graph.facebook.com/v18.0/{ig_user_id}/media",
+                data=container_data,
+                timeout=60.0
             )
             container = container_response.json()
-            print(f"📸 Container response: {container_response.status_code} {container}")
+            print(f"📱 Container response: {container_response.status_code} {container}")
 
             if "id" not in container:
                 return {
@@ -296,37 +325,59 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                     "error": container.get("error", {}).get("message", "Container creation failed")
                 }
 
+            creation_id = container["id"]
+
+            if is_video:
+                print(f"⏳ Instagram: waiting for video processing...")
+                for poll_attempt in range(15):   # poll up to 15 times, 5s apart = 75s max
+                    time.sleep(5)
+                    status_resp = httpx.get(
+                        f"https://graph.facebook.com/v18.0/{creation_id}",
+                        params={
+                            "fields"       : "status_code",
+                            "access_token" : access_token
+                        },
+                        timeout=15.0
+                    )
+                    status_data = status_resp.json()
+                    status_code = status_data.get("status_code")
+                    print(f"⏳ Instagram video status: {status_code} (poll {poll_attempt + 1}/15)")
+
+                    if status_code == "FINISHED":
+                        break
+                    elif status_code == "ERROR":
+                        return {"success": False, "error": "Instagram video processing failed"}
+                    elif status_code == "EXPIRED":
+                        return {"success": False, "error": "Instagram video container expired"}
+                else:
+                    return {"success": False, "error": "Instagram video processing timed out"}
+
             publish_response = httpx.post(
                 f"https://graph.facebook.com/v18.0/{ig_user_id}/media_publish",
                 data={
-                    "creation_id"  : container["id"],
+                    "creation_id"  : creation_id,
                     "access_token" : access_token
                 },
                 timeout=30.0
             )
             publish_data = publish_response.json()
-            print(f"📸 Publish response: {publish_response.status_code} {publish_data}")
-
+            print(f"📱 Publish response: {publish_response.status_code} {publish_data}")
             if "id" in publish_data:
                 return {"success": True, "post_id": publish_data["id"]}
             return {
                 "success": False,
                 "error": publish_data.get("error", {}).get("message", "Instagram publish failed")
             }
-
         except httpx.TimeoutException:
             print(f"⏳ Instagram timeout attempt {attempt + 1}/3")
             if attempt < 2:
-                time.sleep(2 ** attempt)  
+                time.sleep(2 ** attempt)
             else:
                 return {"success": False, "error": "Instagram API timed out after 3 attempts"}
-
         except Exception as e:
             return {"success": False, "error": str(e)}
 
     return {"success": False, "error": "Instagram: max retries exceeded"}
-
-
 
 def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dict:
     import httpx
@@ -383,43 +434,122 @@ def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dic
 
     return {"success": True, "asset": asset}
 
+def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dict:
+    import httpx
+
+    headers = {
+        "Authorization"             : f"Bearer {access_token}",
+        "Content-Type"              : "application/json",
+        "X-Restli-Protocol-Version" : "2.0.0"
+    }
+    register_payload = {
+        "registerUploadRequest": {
+            "owner": owner,
+            "recipes": ["urn:li:digitalmediaRecipe:feedshare-video"],
+            "serviceRelationships": [
+                {
+                    "identifier"      : "urn:li:userGeneratedContent",
+                    "relationshipType": "OWNER"
+                }
+            ],
+            "supportedUploadMechanism": ["SYNCHRONOUS_UPLOAD"]
+        }
+    }
+
+    reg_response = httpx.post(
+        "https://api.linkedin.com/v2/assets?action=registerUpload",
+        json=register_payload,
+        headers=headers,
+        timeout=30.0
+    )
+    reg_data = reg_response.json()
+    asset      = reg_data.get("value", {}).get("asset")
+    upload_url = reg_data.get("value", {}).get("uploadMechanism", {}).get(
+        "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}
+    ).get("uploadUrl")
+
+    if not asset or not upload_url:
+        print(f"❌ LinkedIn video registration failed: {reg_data}")
+        return {"success": False, "error": "LinkedIn video asset registration failed"}
+
+    video_response = httpx.get(video_url, timeout=60.0)
+    if video_response.status_code != 200:
+        return {"success": False, "error": "Failed to fetch video for LinkedIn upload"}
+
+    put_response = httpx.put(
+        upload_url,
+        content=video_response.content,
+        headers={"Content-Type": "video/mp4"},
+        timeout=120.0   
+    )
+    if put_response.status_code not in (200, 201, 202):
+        print(f"❌ LinkedIn video upload failed: {put_response.status_code}")
+        return {"success": False, "error": "LinkedIn video upload failed"}
+
+    return {"success": True, "asset": asset}
 
 def _publish_to_linkedin(post: dict, access_token: str) -> dict:
     import httpx
     from database import get_social_account
 
-    account  = get_social_account(post["user_id"], "linkedin")
-    user_urn = account["page_id"]
+    account   = get_social_account(post["user_id"], "linkedin")
+    user_urn  = account["page_id"]
+    media_url = post.get("media_url")
+    is_video  = _is_video_url(media_url)
 
     headers = {
-        "Authorization"              : f"Bearer {access_token}",
-        "Content-Type"               : "application/json",
-        "X-Restli-Protocol-Version"  : "2.0.0"
+        "Authorization"             : f"Bearer {access_token}",
+        "Content-Type"              : "application/json",
+        "X-Restli-Protocol-Version" : "2.0.0"
     }
 
-    if post.get("media_url"):
-        upload_result = _upload_linkedin_image(post["media_url"], access_token, user_urn)
+    if media_url and is_video:
+        print(f"🎥 LinkedIn: uploading video...")
+        upload_result = _upload_linkedin_video(media_url, access_token, user_urn)
         if not upload_result["success"]:
             return upload_result
-        media_payload = [
-            {
-                "status": "READY",
-                "description": {"text": post["content_text"]},
-                "media": upload_result["asset"],
-                "title": {"text": "Image"}
-            }
-        ]
+
         specific_content = {
             "com.linkedin.ugc.ShareContent": {
-                "shareCommentary": {"text": post["content_text"]},
-                "shareMediaCategory": "IMAGE",
-                "media": media_payload
+                "shareCommentary"   : {"text": post["content_text"]},
+                "shareMediaCategory": "VIDEO",
+                "media": [
+                    {
+                        "status"     : "READY",
+                        "media"      : upload_result["asset"],
+                        "title"      : {"text": "Video"},
+                        "description": {"text": post["content_text"]}
+                    }
+                ]
             }
         }
-    else:
+
+    elif media_url:
+        print(f"🖼️ LinkedIn: uploading image...")
+        upload_result = _upload_linkedin_image(media_url, access_token, user_urn)
+        if not upload_result["success"]:
+            return upload_result
+
         specific_content = {
             "com.linkedin.ugc.ShareContent": {
-                "shareCommentary": {"text": post["content_text"]},
+                "shareCommentary"   : {"text": post["content_text"]},
+                "shareMediaCategory": "IMAGE",
+                "media": [
+                    {
+                        "status"     : "READY",
+                        "media"      : upload_result["asset"],
+                        "title"      : {"text": "Image"},
+                        "description": {"text": post["content_text"]}
+                    }
+                ]
+            }
+        }
+
+    else:
+        print(f"📝 LinkedIn: posting text only...")
+        specific_content = {
+            "com.linkedin.ugc.ShareContent": {
+                "shareCommentary"   : {"text": post["content_text"]},
                 "shareMediaCategory": "NONE"
             }
         }
@@ -428,7 +558,7 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
         "author"         : user_urn,
         "lifecycleState" : "PUBLISHED",
         "specificContent": specific_content,
-        "visibility": {
+        "visibility"     : {
             "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
         }
     }
@@ -442,6 +572,7 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
         )
         if response.status_code == 201:
             return {"success": True, "post_id": response.headers.get("x-restli-id")}
+
         print(f"❌ LinkedIn ugcPosts failed: {response.status_code} {response.text}")
         return {
             "success": False,
@@ -452,7 +583,7 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
         return {"success": False, "error": "LinkedIn API timed out"}
     except Exception as e:
         return {"success": False, "error": str(e)}
-
+    
 
 def _generate_next_occurrence(post: dict):
     try:
@@ -508,22 +639,42 @@ def generate_ai_posts_task(user_id: int):
         if not posts:
             print(f"⚠️ No posts generated for user {user_id}")
             return
+
         user = get_user_by_id(user_id)
         if not user:
             print(f"❌ User {user_id} not found")
             return
 
+        BASE_URL = os.getenv("BASE_URL", "http://localhost:8001")
+
         for post_data in posts:
             try:
+                duplicate = execute_query("""
+                    SELECT sp.id FROM scheduled_posts sp
+                    WHERE sp.trigger_name = %s
+                    AND sp.ai_generated = TRUE
+                    AND sp.created_at::date = CURRENT_DATE
+                    AND EXISTS (
+                        SELECT 1 FROM post_templates pt
+                        WHERE pt.id = sp.template_id
+                        AND pt.user_id = %s
+                    )
+                    LIMIT 1
+                """, (post_data.get("trigger_name"), user_id), fetch="one")
+
+                if duplicate:
+                    print(f"⏭️ Duplicate skipped: {post_data.get('trigger_name')}")
+                    continue
                 template = execute_query("""
                     INSERT INTO post_templates
                         (user_id, content_text, media_url, platforms,
                          recurrence_type, interval_days, start_date, timezone)
-                    VALUES (%s, %s, NULL, %s, 'ONE_TIME', 1, %s, 'UTC')
+                    VALUES (%s, %s, %s, %s, 'ONE_TIME', 1, %s, 'UTC')
                     RETURNING id
                 """, (
                     user_id,
                     post_data["content_text"],
+                    post_data.get("media_url"),    
                     post_data["platforms"],
                     post_data["scheduled_at"]
                 ), fetch="one")
@@ -534,26 +685,27 @@ def generate_ai_posts_task(user_id: int):
                 template_id = template["id"]
                 post = execute_query("""
                     INSERT INTO scheduled_posts
-                        (template_id, scheduled_at, status)
-                    VALUES (%s, %s, 'awaiting_approval')
+                        (template_id, scheduled_at, status,
+                         ai_generated, trigger_type, trigger_name)
+                    VALUES (%s, %s, 'awaiting_approval', TRUE, %s, %s)
                     RETURNING id
-                """, (template_id, post_data["scheduled_at"]), fetch="one")
+                """, (
+                    template_id,
+                    post_data["scheduled_at"],
+                    post_data.get("trigger_type"),
+                    post_data.get("trigger_name")
+                ), fetch="one")
 
                 if not post:
                     continue
 
                 post_id = post["id"]
-                from utils import generate_confirmation_token, hash_token
-                raw_token = generate_confirmation_token()
-                hashed    = hash_token(raw_token)
+                raw_token   = generate_confirmation_token()
+                hashed      = hash_token(raw_token)
                 save_confirmation_token(post_id, hashed)
-                from services import send_confirmation_email
-                BASE_URL    = os.getenv("BASE_URL", "http://localhost:8001")
-                approve_url = f"{BASE_URL}/approvals/{post_id}/approve?token={raw_token}"
-                reject_url  = f"{BASE_URL}/approvals/{post_id}/reject?token={raw_token}"
-
+                approve_url  = f"{BASE_URL}/approvals/{post_id}/approve?token={raw_token}"
+                reject_url   = f"{BASE_URL}/approvals/{post_id}/reject?token={raw_token}"
                 scheduled_str = post_data["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
-
                 send_confirmation_email(
                     to_email     = user["email"],
                     post_content = post_data["content_text"],
@@ -562,18 +714,15 @@ def generate_ai_posts_task(user_id: int):
                     approve_url  = approve_url,
                     reject_url   = reject_url
                 )
-
-                print(f"✅ AI post created (id: {post_id}) | {post_data['trigger_type']}: {post_data['trigger_name']}")
-
+                print(f"✅ AI post created (id: {post_id}) | {post_data['trigger_type']}: {post_data['trigger_name']} | platforms: {post_data['platforms']}")
             except Exception as e:
-                print(f"❌ Failed to save post for user {user_id}: {e}")
+                print(f"❌ Failed to save post: {e}")
                 continue
 
         print(f"✅ AI generation done for user {user_id} — {len(posts)} posts queued")
 
     except Exception as e:
         print(f"❌ generate_ai_posts_task failed for user {user_id}: {e}")
-
 
 @celery_app.task(name="tasks.generate_ai_posts_for_all_users")
 def generate_ai_posts_for_all_users():
@@ -594,3 +743,10 @@ def generate_ai_posts_for_all_users():
     for user in users:
         generate_ai_posts_task.delay(user["user_id"])
         print(f"✅ Queued AI generation for user {user['user_id']}")
+
+def _is_video_url(url: str) -> bool:
+    if not url:
+        return False
+    video_extensions = ('.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v')
+    url_lower = url.lower().split('?')[0]  # strip query params
+    return any(url_lower.endswith(ext) for ext in video_extensions)
