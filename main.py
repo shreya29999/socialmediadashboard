@@ -1,17 +1,8 @@
-# Section 1: Imports + App Init
-# Section 2: Startup + Shutdown
-# Section 3: Auth Routes (register, login)
-# Section 4: Platform Routes (connect FB, IG, LI + account details)
-# Section 5: Post Routes (create, list, get, edit, delete, skip, publish now)
-# Section 6: Media Upload Route (Cloudinary)
-# Section 7: Approval Routes (approve, reject)
-# Section 8: Analytics Route
-# Section 9: Calendar Routes
-
+from enum import Enum
 from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List, Union
 from datetime import datetime, timezone
 import httpx
@@ -19,6 +10,7 @@ import os
 import cloudinary
 import cloudinary.uploader
 from dotenv import load_dotenv
+from logger import logger
 
 load_dotenv()
 
@@ -51,17 +43,23 @@ from utils import (
     hash_password,
     verify_password,
     verify_confirmation_token,
-    calculate_next_dates as calc_dates
+    calculate_next_dates as calc_dates,
+    generate_post_preview
 )
 from tasks import publish_post_task
-
-# ── SECTION 1 — APP INIT ────────────────────────────────
+from event_fetcher import answer_rag_query
 
 app = FastAPI(
     title="Social Media Dashboard",
     description="Automate your social media posts",
     version="2.0.0"
 )
+
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -78,7 +76,6 @@ META_REDIRECT_URI      = os.getenv("META_REDIRECT_URI")
 LINKEDIN_CLIENT_ID     = os.getenv("LINKEDIN_CLIENT_ID")
 LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET")
 LINKEDIN_REDIRECT_URI  = os.getenv("LINKEDIN_REDIRECT_URI")
-
 CLOUDINARY_CLOUD_NAME  = os.getenv("CLOUDINARY_CLOUD_NAME")
 CLOUDINARY_API_KEY     = os.getenv("CLOUDINARY_API_KEY")
 CLOUDINARY_API_SECRET  = os.getenv("CLOUDINARY_API_SECRET")
@@ -90,26 +87,20 @@ cloudinary.config(
     secure     = True
 )
 
-
-# ── SECTION 2 — STARTUP + SHUTDOWN ──────────────────────
-
 @app.on_event("startup")
 async def startup():
     init_db()
-    print("✅ App started, DB ready")
+    logger.info("App started, DB ready")
 
 
 @app.on_event("shutdown")
 async def shutdown():
-    print("👋 App shutting down")
+    logger.info("App shutting down")
 
 
 @app.get("/")
 def root():
     return {"message": "Social Media Dashboard API v2 ✅"}
-
-
-# ── SECTION 3 — AUTH ROUTES ─────────────────────────────
 
 class RegisterRequest(BaseModel):
     email    : str
@@ -119,6 +110,53 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email    : str
     password : str
+
+class RejectRequest(BaseModel):
+    token  : str
+    reason : Optional[str] = None
+
+class RecurrenceType(str, Enum):
+    ONE_TIME      = "ONE_TIME"
+    EVERY_X_DAYS  = "EVERY_X_DAYS"
+    WEEKLY        = "WEEKLY"
+    MONTHLY       = "MONTHLY"
+    CRON          = "CRON"
+
+
+class Platform(str, Enum):
+    facebook  = "facebook"
+    instagram = "instagram"
+    linkedin  = "linkedin"
+
+
+class CreatePostRequest(BaseModel):
+    content_text    : str = Field(..., min_length=1, max_length=2000)
+    media_url       : Optional[str] = None
+    platforms       : List[Platform]
+    recurrence_type : RecurrenceType = RecurrenceType.ONE_TIME
+    interval_days   : Optional[int] = 1
+    start_date      : str
+    end_date        : Optional[str] = None
+    max_occurrences : Optional[int] = None
+    timezone        : Optional[str] = "UTC"
+
+
+class UpdatePostRequest(BaseModel):
+    content_text : Optional[str] = Field(None, min_length=1, max_length=2000)
+    media_url    : Optional[str] = None
+    platforms    : Optional[List[Platform]] = None
+    scheduled_at : Optional[str] = None
+
+
+class UserProfileRequest(BaseModel):
+    persona        : str
+    industry       : Union[str, List[str]]
+    brand_name     : str
+    tone           : Union[str, List[str]]
+    audience       : Union[str, List[str]]
+    country_code   : str
+    language       : str = "english"
+    posts_per_week : int = 3
 
 
 def get_current_user(
@@ -170,10 +208,6 @@ def get_me(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
-
-# ── SECTION 4 — PLATFORM ROUTES ─────────────────────────
-
-# ── Facebook ──
 
 @app.get("/auth/facebook/connect")
 def facebook_connect(current_user: dict = Depends(get_current_user)):
@@ -277,8 +311,6 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
         }
 
 
-# ── LinkedIn ──
-
 @app.get("/auth/linkedin/connect")
 def linkedin_connect(current_user: dict = Depends(get_current_user)):
     user_id  = current_user["user_id"]
@@ -327,8 +359,6 @@ async def linkedin_callback(code: str = Query(...), state: str = Query(...)):
     return {"message": "LinkedIn connected ✅", "user_urn": user_urn}
 
 
-# ── Platform status (simple connected/not) ──
-
 @app.get("/platforms/status")
 def platform_status(current_user: dict = Depends(get_current_user)):
     user_id = current_user["user_id"]
@@ -338,8 +368,6 @@ def platform_status(current_user: dict = Depends(get_current_user)):
         status[platform]  = "connected" if account else "not connected"
     return status
 
-
-# ── Platform accounts (real profile names) ──
 
 @app.get("/platforms/accounts")
 async def platform_accounts(current_user: dict = Depends(get_current_user)):
@@ -366,8 +394,6 @@ async def platform_accounts(current_user: dict = Depends(get_current_user)):
             accounts["facebook"] = {"connected": True, "page_id": fb_account["page_id"], "name": "Facebook Page", "followers": 0}
     else:
         accounts["facebook"] = {"connected": False}
-
-    # ── Instagram ──
     ig_account = get_social_account(user_id, "instagram")
     if ig_account:
         try:
@@ -388,8 +414,6 @@ async def platform_accounts(current_user: dict = Depends(get_current_user)):
             accounts["instagram"] = {"connected": True, "page_id": ig_account["page_id"], "name": "Instagram Account", "followers": 0}
     else:
         accounts["instagram"] = {"connected": False}
-
-    # ── LinkedIn ──
     li_account = get_social_account(user_id, "linkedin")
     if li_account:
         try:
@@ -412,8 +436,6 @@ async def platform_accounts(current_user: dict = Depends(get_current_user)):
 
     return accounts
 
-
-# ── SECTION 6 — MEDIA UPLOAD ────────────────────────────
 
 @app.post("/media/upload")
 async def upload_media(
@@ -464,37 +486,6 @@ async def upload_media(
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
-# ── SECTION 5 — POST ROUTES ─────────────────────────────
-
-class CreatePostRequest(BaseModel):
-    content_text    : str
-    media_url       : Optional[str] = None
-    platforms       : List[str]
-    recurrence_type : Optional[str] = "ONE_TIME"
-    interval_days   : Optional[int] = 1
-    start_date      : str
-    end_date        : Optional[str] = None
-    max_occurrences : Optional[int] = None
-    timezone        : Optional[str] = "UTC"
-
-
-class UpdatePostRequest(BaseModel):
-    content_text : Optional[str] = None
-    media_url    : Optional[str] = None
-    platforms    : Optional[List[str]] = None
-    scheduled_at : Optional[str] = None
-
-
-class UserProfileRequest(BaseModel):
-    persona        : str
-    industry       : Union[str, List[str]]
-    brand_name     : str
-    tone           : Union[str, List[str]]
-    audience       : Union[str, List[str]]
-    country_code   : str
-    language       : str = "english"
-    posts_per_week : int = 3
 
 
 @app.post("/user/profile")
@@ -576,7 +567,6 @@ def create_post(req: CreatePostRequest, current_user: dict = Depends(get_current
         "upcoming_posts"  : created_posts[:5]
     }
 
-
 @app.get("/posts/")
 def list_posts(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     user_id = current_user["user_id"]
@@ -587,7 +577,6 @@ def list_posts(status: Optional[str] = None, current_user: dict = Depends(get_cu
         for s in ["scheduled", "awaiting_approval", "approved", "posted", "failed", "expired"]:
             posts.extend(get_posts_by_status(user_id, s) or [])
     return {"posts": posts, "total": len(posts)}
-
 
 @app.get("/posts/{post_id}")
 def get_post(post_id: int, current_user: dict = Depends(get_current_user)):
@@ -608,8 +597,6 @@ def edit_post(post_id: int, req: UpdatePostRequest, current_user: dict = Depends
         raise HTTPException(status_code=403, detail="Not your post")
     if post["status"] not in ("scheduled", "awaiting_approval"):
         raise HTTPException(status_code=400, detail=f"Cannot edit post with status: {post['status']}")
-
-    from database import execute_query
 
     updates = []
     params  = []
@@ -744,8 +731,6 @@ def resume_automation(template_id: int, current_user: dict = Depends(get_current
     return {"message": "Automation resumed ▶️"}
 
 
-# ── SECTION 7 — APPROVAL ROUTES ─────────────────────────
-
 @app.get("/approvals/{post_id}/approve")
 def approve(post_id: int, token: str = Query(...)):
     post = get_post_by_id(post_id)
@@ -760,11 +745,6 @@ def approve(post_id: int, token: str = Query(...)):
     approve_post(post_id)
     publish_post_task.delay(post_id)
     return {"message": "Post approved! Publishing now... ✅", "post_id": post_id}
-
-
-class RejectRequest(BaseModel):
-    token  : str
-    reason : Optional[str] = None
 
 
 @app.post("/approvals/{post_id}/reject")
@@ -789,7 +769,6 @@ def get_pending_approvals(current_user: dict = Depends(get_current_user)):
     return {"pending": posts, "count": len(posts) if posts else 0}
 
 
-# ── SECTION 8 — ANALYTICS ───────────────────────────────
 
 @app.get("/analytics")
 def get_analytics(current_user: dict = Depends(get_current_user)):
@@ -828,8 +807,25 @@ def get_analytics(current_user: dict = Depends(get_current_user)):
         )
     }
 
+@app.get("/posts/upcoming")
+def get_upcoming_posts(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["user_id"]
+    posts = get_posts_by_status(user_id, "scheduled")
+    upcoming = []
+    for post in (posts or []):
+        scheduled_at = post.get("scheduled_at")
+        if hasattr(scheduled_at, "isoformat"):
+            scheduled_at = scheduled_at.isoformat()
+        content = (post.get("content_text") or "")
+        if len(content) > 50:
+            content = content[:50].rstrip() + "..."
+        upcoming.append({
+            "post_id": post.get("id"),
+            "scheduled_at": scheduled_at,
+            "content": content
+        })
+    return {"upcoming": upcoming, "total": len(posts) if posts else 0}
 
-# ── SECTION 9 — CALENDAR ROUTES ─────────────────────────
 
 @app.get("/calendar")
 def get_calendar(month: str = Query(..., description="Format: YYYY-MM"), current_user: dict = Depends(get_current_user)):
@@ -861,8 +857,43 @@ def get_calendar(month: str = Query(..., description="Format: YYYY-MM"), current
 
 
 from tasks import generate_ai_posts_task
+class RagQueryRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=800)
+
+
 @app.post("/ai/generate")
 def trigger_ai_generation(current_user: dict = Depends(get_current_user)):
-    """Manually trigger AI post generation for testing."""
     generate_ai_posts_task.delay(current_user["user_id"])
     return {"message": "AI post generation started ✅ Check your email shortly."}
+
+
+@app.post("/ai/rag")
+def rag_query(req: RagQueryRequest, current_user: dict = Depends(get_current_user)):
+    result = answer_rag_query(current_user["user_id"], req.query)
+    if not result:
+        raise HTTPException(status_code=500, detail="RAG query failed")
+    return {
+        "query": req.query,
+        "answer": result.get("answer", ""),
+        "sources": result.get("sources", [])
+    }
+
+@app.delete("/ai/rag/history")
+def clear_rag_history(current_user: dict = Depends(get_current_user)):
+    execute_query(
+        "DELETE FROM rag_chat_history WHERE user_id = %s",
+        (current_user["user_id"],)
+    )
+    return {"message": "Chat history cleared ✅"}
+
+
+@app.get("/posts/{post_id}/preview")
+def preview_post(post_id: int, current_user: dict = Depends(get_current_user)):
+    post = get_post_by_id(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your post")
+    preview = generate_post_preview(post)
+    return {"post_id": post_id, "preview": preview}
+

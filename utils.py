@@ -1,9 +1,3 @@
-# Section 1: JWT Utilities
-# Section 2: Confirmation Token
-# Section 3: Password Hashing
-# Section 4: Recurrence / Next Date Calculator
-# Section 5: OAuth Token Refresh
-
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
@@ -14,12 +8,9 @@ import hashlib
 import httpx
 import os
 from dotenv import load_dotenv
+from logger import logger
 
 load_dotenv()
-
-# ================================================================
-# SECTION 1 — JWT UTILITIES
-# ================================================================
 
 JWT_SECRET     = os.getenv("JWT_SECRET_KEY")
 JWT_ALGORITHM  = os.getenv("JWT_ALGORITHM", "HS256")
@@ -45,26 +36,14 @@ def verify_access_token(token: str) -> Optional[dict]:
     except JWTError:
         return None
 
-
-# ================================================================
-# SECTION 2 — CONFIRMATION TOKEN
-# ================================================================
-
 def generate_confirmation_token() -> str:
     return secrets.token_hex(32)
-
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
-
 def verify_confirmation_token(raw_token: str, hashed_token: str) -> bool:
     return hash_token(raw_token) == hashed_token
-
-
-# ================================================================
-# SECTION 3 — PASSWORD HASHING
-# ================================================================
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -74,11 +53,6 @@ def hash_password(plain_password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
-
-
-# ================================================================
-# SECTION 4 — RECURRENCE / NEXT DATE CALCULATOR
-# ================================================================
 
 def calculate_next_dates(
     recurrence_type : str,
@@ -174,6 +148,24 @@ def calculate_single_next_date(
     return next_date
 
 
+def generate_post_preview(post: dict) -> dict:
+    text = (post.get("content_text") or "").strip()
+    if len(text) > 180:
+        text = text[:177].rstrip() + "..."
+
+    scheduled_at = post.get("scheduled_at")
+    if hasattr(scheduled_at, "isoformat"):
+        scheduled_at = scheduled_at.isoformat()
+
+    return {
+        "text_preview": text,
+        "media_url": post.get("media_url"),
+        "platforms": post.get("platforms") or [],
+        "scheduled_at": scheduled_at,
+        "status": post.get("status")
+    }
+
+
 def _is_valid_date(
     date            : datetime,
     end_date        : Optional[datetime],
@@ -201,16 +193,10 @@ def _add_one_month(dt: datetime) -> datetime:
 
     return dt.replace(year=year, month=month, day=day)
 
-
-# ================================================================
-# SECTION 5 — OAUTH TOKEN REFRESH
-# ================================================================
-
-async def refresh_facebook_token(current_token: str) -> Optional[dict]:
-    
+def refresh_facebook_token(current_token: str) -> Optional[dict]:
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
+        with httpx.Client(timeout=60.0) as client:
+            response = client.get(
                 "https://graph.facebook.com/oauth/access_token",
                 params={
                     "grant_type"        : "fb_exchange_token",
@@ -222,26 +208,28 @@ async def refresh_facebook_token(current_token: str) -> Optional[dict]:
             data = response.json()
 
             if "access_token" in data:
-                expires_in  = data.get("expires_in", 5184000) 
+                expires_in  = data.get("expires_in", 5184000)
                 expires_at  = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 return {
                     "access_token" : data["access_token"],
                     "expires_at"   : expires_at
                 }
+
+            logger.warning("Facebook refresh response missing access_token: %s", data)
             return None
 
-    except Exception as e:
-        print(f"❌ Facebook token refresh failed: {e}")
+    except Exception:
+        logger.exception("Facebook token refresh failed")
         return None
 
 
-async def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
+def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
     if not refresh_token:
-        print("❌ No LinkedIn refresh token available")
+        logger.warning("No LinkedIn refresh token available")
         return None
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
+        with httpx.Client(timeout=60.0) as client:
+            response = client.post(
                 "https://www.linkedin.com/oauth/v2/accessToken",
                 data={
                     "grant_type"    : "refresh_token",
@@ -251,7 +239,7 @@ async def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
                 },
                 headers={"Content-Type": "application/x-www-form-urlencoded"}
             )
-            print(f"🔍 LinkedIn refresh response: {response.status_code} {response.text}")
+            logger.info("LinkedIn refresh response: %s %s", response.status_code, response.text)
             data = response.json()
 
             if "access_token" in data:
@@ -262,48 +250,49 @@ async def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
                     "refresh_token" : data.get("refresh_token", refresh_token),
                     "expires_at"    : expires_at
                 }
+            logger.warning("LinkedIn refresh response missing access_token: %s", data)
             return None
 
-    except Exception as e:
-        print(f"❌ LinkedIn token refresh failed: {e}")
+    except Exception:
+        logger.exception("LinkedIn token refresh failed")
         return None
     
 
-async def check_and_refresh_token(user_id: int, platform: str) -> Optional[str]:
+def check_and_refresh_token(user_id: int, platform: str) -> Optional[str]:
     from database import get_social_account, update_access_token
 
     account = get_social_account(user_id, platform)
     if not account:
-        print(f"❌ No {platform} account found for user {user_id}")
+        logger.error("No %s account found for user %s", platform, user_id)
         return None
 
     now        = datetime.now(timezone.utc)
     expires_at = account["token_expires_at"]
 
     if not expires_at:
-        print(f"✅ {platform} token has no expiry, using as is")
+        logger.info("%s token has no expiry, using as is", platform)
         return account["access_token"]
 
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
     if expires_at > now + timedelta(hours=1):
-        print(f"✅ {platform} token still valid")
+        logger.info("%s token still valid", platform)
         return account["access_token"]
 
-    print(f"🔄 Refreshing {platform} token for user {user_id}")
+    logger.info("Refreshing %s token for user %s", platform, user_id)
 
     if platform in ("facebook", "instagram"):
-        result = await refresh_facebook_token(account["access_token"])
+        result = refresh_facebook_token(account["access_token"])
     elif platform == "linkedin":
-        result = await refresh_linkedin_token(account.get("refresh_token"))
+        result = refresh_linkedin_token(account.get("refresh_token"))
     else:
         return None
 
     if result:
         update_access_token(account["id"], result["access_token"], result["expires_at"])
-        print(f"✅ {platform} token refreshed successfully")
+        logger.info("%s token refreshed successfully", platform)
         return result["access_token"]
 
-    print(f"⚠️ {platform} refresh failed, trying existing token")
+    logger.warning("%s refresh failed, trying existing token", platform)
     return account["access_token"]

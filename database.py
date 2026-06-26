@@ -184,6 +184,20 @@ def create_schema():
                 );
             """)
 
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS rag_chat_history (
+                    id         SERIAL PRIMARY KEY,
+                    user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    role       VARCHAR(10) NOT NULL,
+                    content    TEXT NOT NULL,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                );
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_rag_chat_history_user_created
+                ON rag_chat_history(user_id, created_at DESC);
+            """)
+
         conn.commit()
         print("✅ All tables created")
     except Exception as e:

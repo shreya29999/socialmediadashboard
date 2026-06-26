@@ -1,15 +1,10 @@
-# Section 2: Send Confirmation Task (runs every minute via Beat)
-# Section 3: Expiry Checker Task (runs every minute via Beat)
-# Section 4: Publish Post Task (triggered on approval)
-
 from celery_app import celery_app
 import os
 from database import execute_query
 from database import init_db
 from datetime import datetime, timezone
-import asyncio
-from event_fetcher import run_recommendation_pipeline
 import time
+from event_fetcher import run_recommendation_pipeline_sync
 from database import (
     get_posts_due_for_confirmation,
     get_expired_awaiting_posts,
@@ -38,6 +33,7 @@ from utils import (
     calculate_single_next_date,
     check_and_refresh_token
 )
+from logger import logger
 
 
 init_db()
@@ -46,15 +42,15 @@ BASE_URL = "http://localhost:8001"
 
 @celery_app.task(name="tasks.send_confirmation_task")
 def send_confirmation_task():
-    print("🔍 Checking for posts due for confirmation...")
+    logger.info("Checking for posts due for confirmation")
     posts = get_posts_due_for_confirmation()
     if not posts:
-        print("✅ No posts due for confirmation")
+        logger.info("No posts due for confirmation")
         return
     for post in posts:
         try:
             if post["confirmation_sent_at"]:
-                print(f"⏭️ Post {post['id']} confirmation already sent")
+                logger.info("Post %s confirmation already sent", post["id"])
                 continue
             raw_token    = generate_confirmation_token()
             hashed       = hash_token(raw_token)
@@ -72,18 +68,18 @@ def send_confirmation_task():
                 approve_url  = approve_url,
                 reject_url   = reject_url
             )
-            print(f"✅ Confirmation sent for post {post['id']} to {user['email']}")
+            logger.info("Confirmation sent for post %s to %s", post["id"], user["email"])
 
         except Exception as e:
-            print(f"❌ Failed to send confirmation for post {post['id']}: {e}")
+            logger.exception("Failed to send confirmation for post %s", post["id"])
 
 
 @celery_app.task(name="tasks.expiry_checker_task")
 def expiry_checker_task():
-    print("🔍 Checking for expired posts...")
+    logger.info("Checking for expired posts")
     posts = get_expired_awaiting_posts()
     if not posts:
-        print("✅ No expired posts found")
+        logger.info("No expired posts found")
         return
 
     for post in posts:
@@ -97,10 +93,10 @@ def expiry_checker_task():
                 post_content = full_post["content_text"],
                 scheduled_at = scheduled_at
             )
-            print(f"⚠️ Post {post['id']} marked as expired")
+            logger.warning("Post %s marked as expired", post["id"])
 
         except Exception as e:
-            print(f"❌ Failed to process expired post {post['id']}: {e}")
+            logger.exception("Failed to process expired post %s", post["id"])
 
 @celery_app.task(
     name="tasks.publish_post_task",
@@ -109,18 +105,17 @@ def expiry_checker_task():
     default_retry_delay=60
 )
 
-
 def publish_post_task(self, post_id: int):
-    print(f"🚀 Publishing post {post_id}...")
+    logger.info("Publishing post %s...", post_id)
 
     try:
         post = get_post_by_id(post_id)
         if not post:
-            print(f"❌ Post {post_id} not found")
+            logger.warning("Post %s not found", post_id)
             return
 
         if post["status"] == "posted":
-            print(f"⏭️ Post {post_id} already published")
+            logger.info("Post %s already published", post_id)
             return
 
         update_post_status(post_id, "posting")
@@ -132,14 +127,12 @@ def publish_post_task(self, post_id: int):
         success_platforms = []
         failed_platforms  = []
 
-        print(f"🎯 Platforms to publish: {post['platforms']}")
+        logger.info("Platforms to publish: %s", post['platforms'])
 
         for platform in post["platforms"]:
-            print(f"📤 Attempting: {platform}")
+            logger.info("Attempting publish for %s", platform)
             try:
-                access_token = asyncio.run(
-                    check_and_refresh_token(post["user_id"], platform)
-                )
+                access_token = check_and_refresh_token(post["user_id"], platform)
 
                 if not access_token:
                     raise Exception(f"No valid token for {platform}")
@@ -156,14 +149,14 @@ def publish_post_task(self, post_id: int):
                 if result["success"]:
                     update_target_status(post_id, platform, "posted")
                     success_platforms.append(platform)
-                    print(f"✅ Posted to {platform}")
+                    logger.info("Posted to %s", platform)
                 else:
                     raise Exception(result.get("error", "Unknown error"))
 
             except Exception as platform_error:
                 update_target_status(post_id, platform, "failed", str(platform_error))
                 failed_platforms.append(platform)
-                print(f"❌ Failed to post to {platform}: {platform_error}")
+                logger.error("Failed to post to %s: %s", platform, platform_error)
 
         user         = get_user_by_id(post["user_id"])
         published_at = datetime.now(timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
@@ -176,7 +169,7 @@ def publish_post_task(self, post_id: int):
                 platforms    = success_platforms,
                 published_at = published_at
             )
-            print(f"✅ Post {post_id} published successfully on: {success_platforms}")
+            logger.info("Post %s published successfully on: %s", post_id, success_platforms)
 
         elif success_platforms and failed_platforms:
             update_post_status(post_id, "posted")
@@ -186,9 +179,7 @@ def publish_post_task(self, post_id: int):
                 platforms    = success_platforms,
                 published_at = published_at
             )
-            print(f"⚠️ Post {post_id} partially published.")
-            print(f"   ✅ Success: {success_platforms}")
-            print(f"   ❌ Failed:  {failed_platforms}")
+            logger.warning("Post %s partially published. Success: %s, Failed: %s", post_id, success_platforms, failed_platforms)
 
         else:
             update_post_status(post_id, "failed")
@@ -198,12 +189,12 @@ def publish_post_task(self, post_id: int):
                 failed_platforms = failed_platforms,
                 error            = "All platforms failed to publish"
             )
-            print(f"❌ Post {post_id} failed on all platforms: {failed_platforms}")
+            logger.error("Post %s failed on all platforms: %s", post_id, failed_platforms)
 
         _generate_next_occurrence(post)
 
     except Exception as e:
-        print(f"❌ publish_post_task failed for post {post_id}: {e}")
+        logger.exception("publish_post_task failed for post %s", post_id)
         update_post_status(post_id, "failed")
         raise self.retry(exc=e)
 
@@ -219,8 +210,7 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
     for attempt in range(3):
         try:
             if media_url and is_video:
-                # ── Video post ──
-                print(f"🎥 Facebook: posting video")
+                logger.info("Facebook: posting video")
                 response = httpx.post(
                     f"https://graph.facebook.com/v18.0/{page_id}/videos",
                     data={
@@ -228,11 +218,10 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
                         "description"  : post["content_text"],
                         "access_token" : access_token
                     },
-                    timeout=60.0   # videos need more time
+                    timeout=60.0   
                 )
             elif media_url:
-                # ── Image post ──
-                print(f"🖼️ Facebook: posting image")
+                logger.info("Facebook: posting image")
                 response = httpx.post(
                     f"https://graph.facebook.com/v18.0/{page_id}/photos",
                     data={
@@ -243,8 +232,7 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
                     timeout=30.0
                 )
             else:
-                # ── Text only post ──
-                print(f"📝 Facebook: posting text only")
+                logger.info("Facebook: posting text only")
                 response = httpx.post(
                     f"https://graph.facebook.com/v18.0/{page_id}/feed",
                     data={
@@ -258,14 +246,14 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
             if "id" in data:
                 return {"success": True, "post_id": data["id"]}
 
-            print(f"❌ Facebook publish failed: {data}")
+            logger.error("Facebook publish failed: %s", data)
             return {
                 "success": False,
                 "error"  : data.get("error", {}).get("message", "Unknown Facebook error")
             }
 
         except httpx.TimeoutException:
-            print(f"⏳ Facebook timeout attempt {attempt + 1}/3")
+            logger.warning("Facebook timeout attempt %s/3", attempt + 1)
             if attempt < 2:
                 time.sleep(2 ** attempt)
             else:
@@ -294,7 +282,7 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
     for attempt in range(3):
         try:
             if is_video:
-                print(f"🎥 Instagram attempt {attempt + 1}/3 - creating video container...")
+                logger.info("Instagram attempt %s/3 - creating video container...", attempt + 1)
                 container_data = {
                     "caption"      : post["content_text"],
                     "video_url"    : media_url,
@@ -303,7 +291,7 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                     "access_token" : access_token
                 }
             else:
-                print(f"🖼️ Instagram attempt {attempt + 1}/3 - creating image container...")
+                logger.info("Instagram attempt %s/3 - creating image container...", attempt + 1)
                 container_data = {
                     "caption"      : post["content_text"],
                     "image_url"    : media_url,
@@ -317,7 +305,7 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                 timeout=60.0
             )
             container = container_response.json()
-            print(f"📱 Container response: {container_response.status_code} {container}")
+            logger.debug("Instagram container response: %s %s", container_response.status_code, container)
 
             if "id" not in container:
                 return {
@@ -328,8 +316,8 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
             creation_id = container["id"]
 
             if is_video:
-                print(f"⏳ Instagram: waiting for video processing...")
-                for poll_attempt in range(15):   # poll up to 15 times, 5s apart = 75s max
+                logger.info("Instagram: waiting for video processing...")
+                for poll_attempt in range(15):   
                     time.sleep(5)
                     status_resp = httpx.get(
                         f"https://graph.facebook.com/v18.0/{creation_id}",
@@ -341,7 +329,7 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                     )
                     status_data = status_resp.json()
                     status_code = status_data.get("status_code")
-                    print(f"⏳ Instagram video status: {status_code} (poll {poll_attempt + 1}/15)")
+                    logger.debug("Instagram video status: %s (poll %s/15)", status_code, poll_attempt + 1)
 
                     if status_code == "FINISHED":
                         break
@@ -361,7 +349,7 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                 timeout=30.0
             )
             publish_data = publish_response.json()
-            print(f"📱 Publish response: {publish_response.status_code} {publish_data}")
+            logger.debug("Instagram publish response: %s %s", publish_response.status_code, publish_data)
             if "id" in publish_data:
                 return {"success": True, "post_id": publish_data["id"]}
             return {
@@ -369,7 +357,7 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                 "error": publish_data.get("error", {}).get("message", "Instagram publish failed")
             }
         except httpx.TimeoutException:
-            print(f"⏳ Instagram timeout attempt {attempt + 1}/3")
+            logger.warning("Instagram timeout attempt %s/3", attempt + 1)
             if attempt < 2:
                 time.sleep(2 ** attempt)
             else:
@@ -414,7 +402,7 @@ def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dic
     upload_url = upload_mechanism.get("com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}).get("uploadUrl")
 
     if not asset or not upload_url:
-        print(f"❌ LinkedIn asset registration failed: {reg_data}")
+        logger.error("LinkedIn asset registration failed: %s", reg_data)
         return {
             "success": False,
             "error": reg_data.get("message", "LinkedIn asset registration failed")
@@ -429,7 +417,7 @@ def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dic
 
     put_response = httpx.put(upload_url, content=image_response.content, headers=upload_headers, timeout=60.0)
     if put_response.status_code not in (200, 201, 202):
-        print(f"❌ LinkedIn upload failed: {put_response.status_code} {put_response.text}")
+        logger.error("LinkedIn upload failed: %s %s", put_response.status_code, put_response.text)
         return {"success": False, "error": "LinkedIn image upload failed"}
 
     return {"success": True, "asset": asset}
@@ -469,7 +457,7 @@ def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dic
     ).get("uploadUrl")
 
     if not asset or not upload_url:
-        print(f"❌ LinkedIn video registration failed: {reg_data}")
+        logger.error("LinkedIn video registration failed: %s", reg_data)
         return {"success": False, "error": "LinkedIn video asset registration failed"}
 
     video_response = httpx.get(video_url, timeout=60.0)
@@ -483,7 +471,7 @@ def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dic
         timeout=120.0   
     )
     if put_response.status_code not in (200, 201, 202):
-        print(f"❌ LinkedIn video upload failed: {put_response.status_code}")
+        logger.error("LinkedIn video upload failed: %s", put_response.status_code)
         return {"success": False, "error": "LinkedIn video upload failed"}
 
     return {"success": True, "asset": asset}
@@ -504,7 +492,7 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
     }
 
     if media_url and is_video:
-        print(f"🎥 LinkedIn: uploading video...")
+        logger.info("LinkedIn: uploading video...")
         upload_result = _upload_linkedin_video(media_url, access_token, user_urn)
         if not upload_result["success"]:
             return upload_result
@@ -525,7 +513,7 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
         }
 
     elif media_url:
-        print(f"🖼️ LinkedIn: uploading image...")
+        logger.info("LinkedIn: uploading image...")
         upload_result = _upload_linkedin_image(media_url, access_token, user_urn)
         if not upload_result["success"]:
             return upload_result
@@ -546,7 +534,7 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
         }
 
     else:
-        print(f"📝 LinkedIn: posting text only...")
+        logger.info("LinkedIn: posting text only...")
         specific_content = {
             "com.linkedin.ugc.ShareContent": {
                 "shareCommentary"   : {"text": post["content_text"]},
@@ -573,7 +561,7 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
         if response.status_code == 201:
             return {"success": True, "post_id": response.headers.get("x-restli-id")}
 
-        print(f"❌ LinkedIn ugcPosts failed: {response.status_code} {response.text}")
+        logger.error("LinkedIn ugcPosts failed: %s %s", response.status_code, response.text)
         return {
             "success": False,
             "error"  : response.json().get("message", "LinkedIn post failed")
@@ -592,11 +580,11 @@ def _generate_next_occurrence(post: dict):
             return
 
         if template["recurrence_type"] == "ONE_TIME":
-            print(f"⏭️ One time post, no next occurrence")
+            logger.info("One time post, no next occurrence")
             return
 
         if template["status"] != "active":
-            print(f"⏭️ Template {template['id']} is {template['status']}, skipping")
+            logger.info("Template %s is %s, skipping", template["id"], template["status"])
             return
 
         next_date = calculate_single_next_date(
@@ -609,7 +597,7 @@ def _generate_next_occurrence(post: dict):
         )
 
         if not next_date:
-            print(f"✅ Template {template['id']} has completed all occurrences")
+            logger.info("Template %s has completed all occurrences", template["id"])
             from database import execute_query
             execute_query(
                 "UPDATE post_templates SET status = 'completed' WHERE id = %s",
@@ -619,30 +607,23 @@ def _generate_next_occurrence(post: dict):
 
         new_post = create_scheduled_post(template["id"], next_date)
         increment_occurrence_count(template["id"])
-        print(f"✅ Next occurrence created: {next_date} (post id: {new_post['id']})")
+        logger.info("Next occurrence created: %s (post id: %s)", next_date, new_post["id"])
 
     except Exception as e:
-        print(f"❌ Failed to generate next occurrence: {e}")
-
-# ================================================================
-# SECTION 5 — AI RECOMMENDATION TASK
-# ================================================================
-
-import asyncio
-from event_fetcher import run_recommendation_pipeline
+        logger.exception("Failed to generate next occurrence")
 
 @celery_app.task(name="tasks.generate_ai_posts_task")
 def generate_ai_posts_task(user_id: int):
-    print(f"🤖 Running AI post generation for user {user_id}...")
+    logger.info("Running AI post generation for user %s...", user_id)
     try:
-        posts = asyncio.run(run_recommendation_pipeline(user_id))
+        posts = run_recommendation_pipeline_sync(user_id)
         if not posts:
-            print(f"⚠️ No posts generated for user {user_id}")
+            logger.warning("No posts generated for user %s", user_id)
             return
 
         user = get_user_by_id(user_id)
         if not user:
-            print(f"❌ User {user_id} not found")
+            logger.error("User %s not found", user_id)
             return
 
         BASE_URL = os.getenv("BASE_URL", "http://localhost:8001")
@@ -663,7 +644,7 @@ def generate_ai_posts_task(user_id: int):
                 """, (post_data.get("trigger_name"), user_id), fetch="one")
 
                 if duplicate:
-                    print(f"⏭️ Duplicate skipped: {post_data.get('trigger_name')}")
+                    logger.info("Duplicate skipped: %s", post_data.get('trigger_name'))
                     continue
                 template = execute_query("""
                     INSERT INTO post_templates
@@ -714,15 +695,21 @@ def generate_ai_posts_task(user_id: int):
                     approve_url  = approve_url,
                     reject_url   = reject_url
                 )
-                print(f"✅ AI post created (id: {post_id}) | {post_data['trigger_type']}: {post_data['trigger_name']} | platforms: {post_data['platforms']}")
+                logger.info(
+                    "AI post created (id: %s) | %s: %s | platforms: %s",
+                    post_id,
+                    post_data["trigger_type"],
+                    post_data["trigger_name"],
+                    post_data["platforms"]
+                )
             except Exception as e:
-                print(f"❌ Failed to save post: {e}")
+                logger.exception("Failed to save AI post for user %s", user_id)
                 continue
 
-        print(f"✅ AI generation done for user {user_id} — {len(posts)} posts queued")
+        logger.info("AI generation done for user %s — %s posts queued", user_id, len(posts))
 
     except Exception as e:
-        print(f"❌ generate_ai_posts_task failed for user {user_id}: {e}")
+        logger.exception("generate_ai_posts_task failed for user %s", user_id)
 
 @celery_app.task(name="tasks.generate_ai_posts_for_all_users")
 def generate_ai_posts_for_all_users():
@@ -736,13 +723,13 @@ def generate_ai_posts_for_all_users():
     """, fetch="all")
 
     if not users:
-        print("⚠️ No users with completed profiles found")
+        logger.warning("No users with completed profiles found")
         return
 
-    print(f"🤖 Triggering AI generation for {len(users)} users...")
+    logger.info("Triggering AI generation for %s users...", len(users))
     for user in users:
         generate_ai_posts_task.delay(user["user_id"])
-        print(f"✅ Queued AI generation for user {user['user_id']}")
+        logger.info("Queued AI generation for user %s", user["user_id"])
 
 def _is_video_url(url: str) -> bool:
     if not url:

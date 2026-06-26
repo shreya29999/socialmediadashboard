@@ -1,7 +1,3 @@
-# ================================================================
-# SECTION 1 — IMPORTS
-# ================================================================
-
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -16,10 +12,6 @@ SMTP_EMAIL    = os.getenv("SMTP_EMAIL")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD")
 SMTP_FROM     = os.getenv("SMTP_FROM_NAME", "Social Dashboard")
 
-
-# ================================================================
-# SECTION 2 — BASE EMAIL SENDER
-# ================================================================
 
 def send_email(to_email: str, subject: str, html_body: str):
     
@@ -44,10 +36,6 @@ def send_email(to_email: str, subject: str, html_body: str):
         print(f"❌ Email failed: {e}")
         return False
 
-
-# ================================================================
-# SECTION 3 — CONFIRMATION EMAIL (Approve / Reject)
-# ================================================================
 
 def send_confirmation_email(
     to_email: str,
@@ -104,10 +92,6 @@ def send_confirmation_email(
     )
 
 
-# ================================================================
-# SECTION 4 — SUCCESS EMAIL
-# ================================================================
-
 def send_success_email(
     to_email: str,
     post_content: str,
@@ -140,10 +124,6 @@ def send_success_email(
     )
 
 
-# ================================================================
-# SECTION 5 — FAILURE EMAIL
-# ================================================================
-
 def send_failure_email(
     to_email: str,
     post_content: str,
@@ -174,11 +154,6 @@ def send_failure_email(
         subject="❌ Your post failed to publish",
         html_body=html_body
     )
-
-
-# ================================================================
-# SECTION 6 — EXPIRED EMAIL
-# ================================================================
 
 def send_expired_email(
     to_email: str,
