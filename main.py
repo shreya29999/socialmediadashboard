@@ -20,6 +20,8 @@ from database import (
     get_user_by_email,
     execute_query,
     get_user_by_id,
+    get_admins,
+    get_users_for_admin,
     save_social_account,
     get_social_account,
     create_post_template,
@@ -30,12 +32,26 @@ from database import (
     create_scheduled_post,
     get_post_by_id,
     get_posts_by_status,
+    get_posts_by_status_for_admin,
     get_posts_for_calendar,
+    get_posts_for_calendar_for_admin,
     update_post_status,
     get_post_by_token,
     approve_post,
     reject_post,
-    create_post_targets
+    create_post_targets,
+    get_superadmin,
+    get_all_users,
+    get_all_posts_for_superadmin,
+    get_posts_awaiting_superadmin,
+    create_approval_stage,
+    update_hr_approval,
+    update_superadmin_approval,
+    save_superadmin_token,
+    superadmin_final_approve,
+    superadmin_final_reject,
+    get_approval_stage,
+    update_last_login
 )
 from utils import (
     create_access_token,
@@ -47,7 +63,9 @@ from utils import (
     generate_post_preview
 )
 from tasks import publish_post_task
+from tasks import _escalate_to_superadmin
 from event_fetcher import answer_rag_query
+from admin_utils import resolve_admin_for_signup
 
 app = FastAPI(
     title="Social Media Dashboard",
@@ -103,9 +121,11 @@ def root():
     return {"message": "Social Media Dashboard API v2 ✅"}
 
 class RegisterRequest(BaseModel):
-    email    : str
-    password : str
-    timezone : Optional[str] = "UTC"
+    email       : str
+    password    : str
+    timezone    : Optional[str] = "UTC"
+    invite_code : Optional[str] = None
+    admin_email : Optional[str] = None
 
 class LoginRequest(BaseModel):
     email    : str
@@ -114,6 +134,17 @@ class LoginRequest(BaseModel):
 class RejectRequest(BaseModel):
     token  : str
     reason : Optional[str] = None
+
+
+class CreateManagedUserRequest(BaseModel):
+    email    : str
+    password : str
+
+
+class CreateAdminRequest(BaseModel):
+    email       : str
+    password    : str
+    invite_code : Optional[str] = None
 
 class RecurrenceType(str, Enum):
     ONE_TIME      = "ONE_TIME"
@@ -169,35 +200,88 @@ def get_current_user(
     return payload
 
 
+def get_current_superadmin(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token   = credentials.credentials
+    payload = verify_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = get_user_by_id(payload["user_id"])
+    if not user or user["role"] != "superadmin":
+        raise HTTPException(status_code=403, detail="SuperAdmin access required")
+    return payload
+
+
+def get_current_admin(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    token   = credentials.credentials
+    payload = verify_access_token(token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    user = get_user_by_id(payload["user_id"])
+    if not user or user["role"] not in {"admin", "superadmin"}:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return payload
+
+
+def get_actor_user(current_user: dict):
+    return get_user_by_id(current_user["user_id"])
+
+
+def can_access_resource(resource_user_id: int, current_user: dict) -> bool:
+    actor = get_actor_user(current_user)
+    if not actor:
+        return False
+    if actor["role"] == "superadmin":
+        return True
+    if actor["role"] == "admin":
+        owner = get_user_by_id(resource_user_id)
+        return bool(owner and owner.get("admin_id") == actor["id"])
+    return resource_user_id == current_user["user_id"]
+
+
 @app.post("/auth/register")
 def register(req: RegisterRequest):
     existing = get_user_by_email(req.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     hashed = hash_password(req.password)
-    user   = create_user(req.email, hashed)
-    token  = create_access_token(user["id"], user["email"])
+    admins = get_admins() or []
+    resolved_admin = resolve_admin_for_signup(
+        email=req.email,
+        invite_code=req.invite_code,
+        admin_email=req.admin_email,
+        admins=admins,
+        domain_mapping={"shilsha.com": "admin@shilsha.com"},
+    )
+    admin_id = resolved_admin["id"] if resolved_admin else None
+    user = create_user(req.email, hashed, admin_id=admin_id)
+    token = create_access_token(user["id"], user["email"])
     return {
         "message"      : "Registered successfully",
         "access_token" : token,
         "user_id"      : user["id"],
-        "email"        : user["email"]
+        "email"        : user["email"],
+        "admin_id"     : admin_id,
+        "assigned_admin": bool(admin_id)
     }
-
 
 @app.post("/auth/login")
 def login(req: LoginRequest):
     user = get_user_by_email(req.email)
-    if not user:
+    if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    if not verify_password(req.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    update_last_login(user["id"])   
     token = create_access_token(user["id"], user["email"])
     return {
         "message"      : "Login successful",
         "access_token" : token,
         "user_id"      : user["id"],
-        "email"        : user["email"]
+        "email"        : user["email"],
+        "role"         : user["role"],
+        "admin_id"     : user.get("admin_id")
     }
 
 
@@ -242,14 +326,13 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
                 "client_id"     : META_APP_ID,
                 "client_secret" : META_APP_SECRET,
                 "redirect_uri"  : META_REDIRECT_URI,
-                "code"          : code
+                "code" : code
             }
         )
-        token_data        = token_response.json()
+        token_data = token_response.json()
         short_lived_token = token_data.get("access_token")
         if not short_lived_token:
             raise HTTPException(status_code=400, detail=f"Facebook token error: {token_data}")
-
         long_response    = await client.get(
             "https://graph.facebook.com/v18.0/oauth/access_token",
             params={
@@ -262,7 +345,6 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
         long_data        = long_response.json()
         long_lived_token = long_data.get("access_token", short_lived_token)
         expires_in       = long_data.get("expires_in", 5184000)
-
         from datetime import timedelta
         expires_at     = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         pages_response = await client.get(
@@ -275,7 +357,6 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
         )
         pages      = pages_response.json().get("data", [])
         ig_account = None
-
         if pages:
             page       = pages[0]
             page_id    = page["id"]
@@ -292,7 +373,6 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
             )).json()
             page_id    = me_data.get("id")
             page_token = long_lived_token
-
         save_social_account(
             user_id=user_id, platform="facebook",
             access_token=page_token, page_id=page_id,
@@ -303,7 +383,6 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
                 user_id=user_id, platform="instagram",
                 access_token=page_token, page_id=ig_account["id"]
             )
-
         return {
             "message"  : "Facebook connected ✅",
             "page_id"  : page_id,
@@ -344,7 +423,7 @@ async def linkedin_callback(code: str = Query(...), state: str = Query(...)):
         if not access_token:
             raise HTTPException(status_code=400, detail=f"LinkedIn token error: {token_data}")
 
-        profile  = (await client.get(
+        profile = (await client.get(
             "https://api.linkedin.com/v2/userinfo",
             headers={"Authorization": f"Bearer {access_token}"}
         )).json()
@@ -356,7 +435,7 @@ async def linkedin_callback(code: str = Query(...), state: str = Query(...)):
             refresh_token=token_data.get("refresh_token"),
             page_id=user_urn
         )
-    return {"message": "LinkedIn connected ✅", "user_urn": user_urn}
+    return {"message": "LinkedIn connected ✅","user_urn": user_urn}
 
 
 @app.get("/platforms/status")
@@ -433,14 +512,13 @@ async def platform_accounts(current_user: dict = Depends(get_current_user)):
             accounts["linkedin"] = {"connected": True, "page_id": li_account["page_id"], "name": "LinkedIn User"}
     else:
         accounts["linkedin"] = {"connected": False}
-
     return accounts
 
 
 @app.post("/media/upload")
 async def upload_media(
     file         : UploadFile = File(...),
-    current_user : dict       = Depends(get_current_user)
+    current_user : dict = Depends(get_current_user)
 ):
     allowed_images = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
     allowed_videos = {"video/mp4", "video/mov", "video/quicktime", "video/avi", "video/mkv"}
@@ -472,7 +550,6 @@ async def upload_media(
             ]
 
         result = cloudinary.uploader.upload(contents, **upload_options)
-
         return {
             "success"      : True,
             "url"          : result["secure_url"],
@@ -531,7 +608,6 @@ def create_post(req: CreatePostRequest, current_user: dict = Depends(get_current
     user_id = current_user["user_id"]
     start   = datetime.fromisoformat(req.start_date.replace('Z', '+00:00'))
     end     = datetime.fromisoformat(req.end_date.replace('Z', '+00:00')) if req.end_date else None
-
     template = create_post_template(
         user_id         = user_id,
         content_text    = req.content_text,
@@ -545,7 +621,6 @@ def create_post(req: CreatePostRequest, current_user: dict = Depends(get_current
         timezone        = req.timezone
     )
     template_id = template["id"]
-
     dates = calc_dates(
         recurrence_type = req.recurrence_type,
         start_date      = start,
@@ -554,7 +629,6 @@ def create_post(req: CreatePostRequest, current_user: dict = Depends(get_current
         end_date        = end,
         max_occurrences = req.max_occurrences
     )
-
     created_posts = []
     for date in dates:
         post = create_scheduled_post(template_id, date)
@@ -569,6 +643,15 @@ def create_post(req: CreatePostRequest, current_user: dict = Depends(get_current
 
 @app.get("/posts/")
 def list_posts(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    actor = get_actor_user(current_user)
+    if actor and actor.get("role") == "admin":
+        if status:
+            posts = get_posts_by_status_for_admin(actor["id"], status)
+        else:
+            posts = []
+            for s in ["scheduled", "awaiting_approval", "approved", "posted", "failed", "expired"]:
+                posts.extend(get_posts_by_status_for_admin(actor["id"], s) or [])
+        return {"posts": posts, "total": len(posts)}
     user_id = current_user["user_id"]
     if status:
         posts = get_posts_by_status(user_id, status)
@@ -583,7 +666,7 @@ def get_post(post_id: int, current_user: dict = Depends(get_current_user)):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["user_id"] != current_user["user_id"]:
+    if not can_access_resource(post["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your post")
     return post
 
@@ -593,7 +676,7 @@ def edit_post(post_id: int, req: UpdatePostRequest, current_user: dict = Depends
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["user_id"] != current_user["user_id"]:
+    if not can_access_resource(post["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your post")
     if post["status"] not in ("scheduled", "awaiting_approval"):
         raise HTTPException(status_code=400, detail=f"Cannot edit post with status: {post['status']}")
@@ -652,7 +735,7 @@ def delete_post(post_id: int, current_user: dict = Depends(get_current_user)):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["user_id"] != current_user["user_id"]:
+    if not can_access_resource(post["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your post")
     if post["status"] == "posted":
         raise HTTPException(status_code=400, detail="Cannot delete an already published post")
@@ -669,7 +752,7 @@ def publish_now(post_id: int, current_user: dict = Depends(get_current_user)):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["user_id"] != current_user["user_id"]:
+    if not can_access_resource(post["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your post")
     if post["status"] == "posted":
         raise HTTPException(status_code=400, detail="Post already published")
@@ -686,7 +769,7 @@ def skip_post(post_id: int, current_user: dict = Depends(get_current_user)):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["user_id"] != current_user["user_id"]:
+    if not can_access_resource(post["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your post")
     if post["status"] != "scheduled":
         raise HTTPException(status_code=400, detail=f"Cannot skip post with status: {post['status']}")
@@ -700,7 +783,7 @@ def retry_post(post_id: int, current_user: dict = Depends(get_current_user)):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["user_id"] != current_user["user_id"]:
+    if not can_access_resource(post["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your post")
     if post["status"] not in ("failed", "expired"):
         raise HTTPException(status_code=400, detail=f"Can only retry failed/expired posts")
@@ -714,7 +797,7 @@ def pause_automation(template_id: int, current_user: dict = Depends(get_current_
     template = get_template_by_id(template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    if template["user_id"] != current_user["user_id"]:
+    if not can_access_resource(template["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your template")
     pause_template(template_id)
     return {"message": "Automation paused ⏸️"}
@@ -725,62 +808,94 @@ def resume_automation(template_id: int, current_user: dict = Depends(get_current
     template = get_template_by_id(template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
-    if template["user_id"] != current_user["user_id"]:
+    if not can_access_resource(template["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your template")
     resume_template(template_id)
     return {"message": "Automation resumed ▶️"}
 
 
-@app.get("/approvals/{post_id}/approve")
-def approve(post_id: int, token: str = Query(...)):
+@app.get("/approvals/{post_id}/hr-approve")
+def hr_approve(post_id: int, token: str = Query(...)):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["status"] != "awaiting_approval":
-        raise HTTPException(status_code=400, detail=f"Post cannot be approved. Status: {post['status']}")
+    if post["status"] != "awaiting_hr_approval":
+        raise HTTPException(status_code=400, detail=f"Post status is: {post['status']}")
     if not verify_confirmation_token(token, post["confirmation_token"]):
         raise HTTPException(status_code=400, detail="Invalid or expired token")
     if post["token_used"]:
         raise HTTPException(status_code=400, detail="Token already used")
-    approve_post(post_id)
-    publish_post_task.delay(post_id)
-    return {"message": "Post approved! Publishing now... ✅", "post_id": post_id}
+    execute_query("UPDATE scheduled_posts SET token_used = TRUE WHERE id = %s", (post_id,))
+    update_hr_approval(post_id, "approved")
+    _escalate_to_superadmin(post_id, hr_status="approved")
+    return {"message": "HR approved ✅ Post sent to SuperAdmin for final review.", "post_id": post_id}
 
 
-@app.post("/approvals/{post_id}/reject")
-def reject(post_id: int, req: RejectRequest):
+@app.post("/approvals/{post_id}/hr-reject")
+def hr_reject(post_id: int, req: RejectRequest):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["status"] != "awaiting_approval":
-        raise HTTPException(status_code=400, detail=f"Post cannot be rejected. Status: {post['status']}")
+    if post["status"] != "awaiting_hr_approval":
+        raise HTTPException(status_code=400, detail=f"Post status is: {post['status']}")
     if not verify_confirmation_token(req.token, post["confirmation_token"]):
         raise HTTPException(status_code=400, detail="Invalid token")
     if post["token_used"]:
         raise HTTPException(status_code=400, detail="Token already used")
-    reject_post(post_id, req.reason)
-    return {"message": "Post cancelled ❌", "post_id": post_id, "reason": req.reason}
+    execute_query("UPDATE scheduled_posts SET token_used = TRUE WHERE id = %s", (post_id,))
+    update_hr_approval(post_id, "rejected", req.reason)
+    _escalate_to_superadmin(post_id, hr_status="rejected", hr_reason=req.reason)
+    return {"message": "HR rejected. Escalated to SuperAdmin for final decision.", "post_id": post_id}
 
 
-@app.get("/approvals/pending")
-def get_pending_approvals(current_user: dict = Depends(get_current_user)):
-    user_id = current_user["user_id"]
-    posts   = get_posts_by_status(user_id, "awaiting_approval")
-    return {"pending": posts, "count": len(posts) if posts else 0}
+@app.get("/approvals/{post_id}/superadmin-approve")
+def superadmin_approve_email(post_id: int, token: str = Query(...)):
+    post = get_post_by_id(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post["status"] != "awaiting_superadmin_approval":
+        raise HTTPException(status_code=400, detail=f"Post status is: {post['status']}")
+    if not verify_confirmation_token(token, post["superadmin_token"]):
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    if post["superadmin_token_used"]:
+        raise HTTPException(status_code=400, detail="Token already used")
+    superadmin_final_approve(post_id)
+    publish_post_task.delay(post_id)
+    return {"message": "SuperAdmin approved ✅ Post is being published!", "post_id": post_id}
 
 
+@app.post("/approvals/{post_id}/superadmin-reject")
+def superadmin_reject_email(post_id: int, req: RejectRequest):
+    post = get_post_by_id(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post["status"] != "awaiting_superadmin_approval":
+        raise HTTPException(status_code=400, detail=f"Post status is: {post['status']}")
+    if not verify_confirmation_token(req.token, post["superadmin_token"]):
+        raise HTTPException(status_code=400, detail="Invalid token")
+    if post["superadmin_token_used"]:
+        raise HTTPException(status_code=400, detail="Token already used")
+    superadmin_final_reject(post_id, req.reason)
+    return {"message": "SuperAdmin rejected ❌ Post cancelled.", "post_id": post_id}
 
 @app.get("/analytics")
 def get_analytics(current_user: dict = Depends(get_current_user)):
-    user_id = current_user["user_id"]
+    actor = get_actor_user(current_user)
     all_statuses = ["scheduled", "awaiting_approval", "approved", "posted", "failed", "expired", "cancelled", "skipped"]
     counts       = {}
     all_posts    = []
 
-    for s in all_statuses:
-        posts       = get_posts_by_status(user_id, s) or []
-        counts[s]   = len(posts)
-        all_posts.extend(posts)
+    if actor and actor.get("role") == "admin":
+        for s in all_statuses:
+            posts       = get_posts_by_status_for_admin(actor["id"], s) or []
+            counts[s]   = len(posts)
+            all_posts.extend(posts)
+    else:
+        user_id = current_user["user_id"]
+        for s in all_statuses:
+            posts       = get_posts_by_status(user_id, s) or []
+            counts[s]   = len(posts)
+            all_posts.extend(posts)
 
     platform_stats = {"facebook": 0, "instagram": 0, "linkedin": 0}
     for post in all_posts:
@@ -809,8 +924,11 @@ def get_analytics(current_user: dict = Depends(get_current_user)):
 
 @app.get("/posts/upcoming")
 def get_upcoming_posts(current_user: dict = Depends(get_current_user)):
-    user_id = current_user["user_id"]
-    posts = get_posts_by_status(user_id, "scheduled")
+    actor = get_actor_user(current_user)
+    if actor and actor.get("role") == "admin":
+        posts = get_posts_by_status_for_admin(actor["id"], "scheduled")
+    else:
+        posts = get_posts_by_status(current_user["user_id"], "scheduled")
     upcoming = []
     for post in (posts or []):
         scheduled_at = post.get("scheduled_at")
@@ -829,7 +947,7 @@ def get_upcoming_posts(current_user: dict = Depends(get_current_user)):
 
 @app.get("/calendar")
 def get_calendar(month: str = Query(..., description="Format: YYYY-MM"), current_user: dict = Depends(get_current_user)):
-    user_id = current_user["user_id"]
+    actor = get_actor_user(current_user)
     try:
         year, mon  = map(int, month.split("-"))
         start_date = datetime(year, mon, 1, tzinfo=timezone.utc)
@@ -839,7 +957,10 @@ def get_calendar(month: str = Query(..., description="Format: YYYY-MM"), current
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid month format. Use YYYY-MM")
 
-    posts = get_posts_for_calendar(user_id, start_date, end_date)
+    if actor and actor.get("role") == "admin":
+        posts = get_posts_for_calendar_for_admin(actor["id"], start_date, end_date)
+    else:
+        posts = get_posts_for_calendar(current_user["user_id"], start_date, end_date)
     calendar_data = {}
     for post in (posts or []):
         date_key = post["scheduled_at"].strftime("%Y-%m-%d")
@@ -892,8 +1013,147 @@ def preview_post(post_id: int, current_user: dict = Depends(get_current_user)):
     post = get_post_by_id(post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Post not found")
-    if post["user_id"] != current_user["user_id"]:
+    if not can_access_resource(post["user_id"], current_user):
         raise HTTPException(status_code=403, detail="Not your post")
     preview = generate_post_preview(post)
     return {"post_id": post_id, "preview": preview}
 
+
+
+@app.post("/admin/users")
+def admin_create_user(req: CreateManagedUserRequest, current_user: dict = Depends(get_current_admin)):
+    actor = get_actor_user(current_user)
+    if not actor or actor["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    existing = get_user_by_email(req.email)
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed = hash_password(req.password)
+    user = create_user(req.email, hashed, role="user", admin_id=actor["id"])
+    return {
+        "message": "User created successfully ✅",
+        "user_id": user["id"],
+        "email": user["email"],
+        "password": req.password,
+        "admin_id": actor["id"]
+    }
+
+
+@app.post("/superadmin/admins")
+def create_admin_account(req: CreateAdminRequest, current_user: dict = Depends(get_current_superadmin)):
+    existing = get_user_by_email(req.email)
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    hashed = hash_password(req.password)
+    user = create_user(req.email, hashed, role="admin", invite_code=req.invite_code)
+    return {"message": "Admin created successfully ✅", "user_id": user["id"], "email": user["email"], "invite_code": req.invite_code}
+
+
+@app.post("/superadmin/create")
+def create_superadmin_account(req: RegisterRequest):
+    existing = get_superadmin()
+    if existing:
+        raise HTTPException(status_code=400, detail="SuperAdmin already exists")
+    hashed = hash_password(req.password)
+    user   = create_user(req.email, hashed, role="superadmin")
+    token  = create_access_token(user["id"], user["email"])
+    return {"message": "SuperAdmin created ✅", "access_token": token, "role": "superadmin"}
+
+
+@app.get("/admin/users")
+def admin_get_users(current_user: dict = Depends(get_current_admin)):
+    user = get_user_by_id(current_user["user_id"])
+    if user and user["role"] == "superadmin":
+        users = get_all_users()
+    else:
+        users = get_users_for_admin(user["id"])
+    return {"users": users, "total": len(users) if users else 0}
+
+
+@app.get("/superadmin/users")
+def superadmin_get_users(current_user: dict = Depends(get_current_superadmin)):
+    users = get_all_users()
+    return {"users": users, "total": len(users) if users else 0}
+
+
+@app.get("/superadmin/posts")
+def superadmin_get_all_posts(
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_superadmin)
+):
+    posts = get_all_posts_for_superadmin(status_filter=status)
+    return {"posts": posts, "total": len(posts) if posts else 0}
+
+
+@app.get("/superadmin/pending")
+def superadmin_get_pending(current_user: dict = Depends(get_current_superadmin)):
+    posts = get_posts_awaiting_superadmin()
+    return {"pending": posts, "count": len(posts) if posts else 0}
+
+
+@app.post("/superadmin/posts/{post_id}/approve")
+def superadmin_approve_dashboard(
+    post_id: int,
+    current_user: dict = Depends(get_current_superadmin)
+):
+    post = get_post_by_id(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post["status"] != "awaiting_superadmin_approval":
+        raise HTTPException(status_code=400, detail=f"Post status is: {post['status']}")
+    superadmin_final_approve(post_id)
+    publish_post_task.delay(post_id)
+    return {"message": f"Post {post_id} approved and queued for publishing ✅"}
+
+
+@app.post("/superadmin/posts/{post_id}/reject")
+def superadmin_reject_dashboard(
+    post_id: int,
+    req: RejectRequest,
+    current_user: dict = Depends(get_current_superadmin)
+):
+    post = get_post_by_id(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Post not found")
+    if post["status"] != "awaiting_superadmin_approval":
+        raise HTTPException(status_code=400, detail=f"Post status is: {post['status']}")
+    superadmin_final_reject(post_id, req.reason)
+    return {"message": f"Post {post_id} rejected ❌", "reason": req.reason}
+
+
+@app.post("/posts/{post_id}/repost")
+def repost(post_id: int, req: CreatePostRequest, current_user: dict = Depends(get_current_user)):
+    original = get_post_by_id(post_id)
+    if not original:
+        raise HTTPException(status_code=404, detail="Original post not found")
+    if original["user_id"] != current_user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not your post")
+    if original["status"] != "posted":
+        raise HTTPException(status_code=400, detail="Can only repost published posts")
+
+    user_id = current_user["user_id"]
+    start   = datetime.fromisoformat(req.start_date.replace('Z', '+00:00'))
+    end     = datetime.fromisoformat(req.end_date.replace('Z', '+00:00')) if req.end_date else None
+
+    template = create_post_template(
+        user_id         = user_id,
+        content_text    = req.content_text,
+        media_url       = req.media_url,
+        platforms       = req.platforms,
+        recurrence_type = req.recurrence_type,
+        interval_days   = req.interval_days,
+        start_date      = start,
+        end_date        = end,
+        max_occurrences = req.max_occurrences,
+        timezone        = req.timezone
+    )
+    post = create_scheduled_post(
+        template["id"], start, reposted_from_id=post_id
+    )
+    create_approval_stage(post["id"])
+    return {
+        "message"         : "Repost scheduled ✅ Will go through HR → SuperAdmin approval",
+        "new_post_id"     : post["id"],
+        "reposted_from"   : post_id,
+        "scheduled_at"    : start.isoformat()
+    }

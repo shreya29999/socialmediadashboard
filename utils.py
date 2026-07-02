@@ -144,7 +144,6 @@ def calculate_single_next_date(
         return None
     if not _is_valid_date(next_date, end_date, max_occurrences, occurrence_count):
         return None
-
     return next_date
 
 

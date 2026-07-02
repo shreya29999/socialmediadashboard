@@ -19,13 +19,21 @@ from database import (
     increment_occurrence_count,
     get_template_by_id,
     create_scheduled_post,
-    get_user_by_id
+    get_user_by_id,
+    create_approval_stage,
+    update_hr_approval,
+    save_superadmin_token,
+    get_superadmin,
+    get_approval_stage,
+    update_last_login
 )
 from services import (
     send_confirmation_email,
     send_success_email,
     send_failure_email,
-    send_expired_email
+    send_expired_email,
+    send_superadmin_approval_email,
+    send_hr_decision_notify_email
 )
 from utils import (
     generate_confirmation_token,
@@ -34,30 +42,26 @@ from utils import (
     check_and_refresh_token
 )
 from logger import logger
-
-
 init_db()
-
-BASE_URL = "http://localhost:8001"
+BASE_URL = os.getenv("BASE_URL")
 
 @celery_app.task(name="tasks.send_confirmation_task")
 def send_confirmation_task():
     logger.info("Checking for posts due for confirmation")
     posts = get_posts_due_for_confirmation()
     if not posts:
-        logger.info("No posts due for confirmation")
         return
     for post in posts:
         try:
             if post["confirmation_sent_at"]:
-                logger.info("Post %s confirmation already sent", post["id"])
                 continue
-            raw_token    = generate_confirmation_token()
-            hashed       = hash_token(raw_token)
+            raw_token = generate_confirmation_token()
+            hashed    = hash_token(raw_token)
             save_confirmation_token(post["id"], hashed)
-            update_post_status(post["id"], "awaiting_approval")
-            approve_url = f"{BASE_URL}/approvals/{post['id']}/approve?token={raw_token}"
-            reject_url  = f"{BASE_URL}/approvals/{post['id']}/reject?token={raw_token}"
+            create_approval_stage(post["id"])
+            update_post_status(post["id"], "awaiting_hr_approval")
+            approve_url = f"{BASE_URL}/approvals/{post['id']}/hr-approve?token={raw_token}"
+            reject_url  = f"{BASE_URL}/approvals/{post['id']}/hr-reject?token={raw_token}"
             user = get_user_by_id(post["user_id"])
             scheduled_at = post["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
             send_confirmation_email(
@@ -68,11 +72,50 @@ def send_confirmation_task():
                 approve_url  = approve_url,
                 reject_url   = reject_url
             )
-            logger.info("Confirmation sent for post %s to %s", post["id"], user["email"])
-
-        except Exception as e:
+            logger.info("HR confirmation sent for post %s", post["id"])
+        except Exception:
             logger.exception("Failed to send confirmation for post %s", post["id"])
 
+def _escalate_to_superadmin(post_id: int, hr_status: str, hr_reason: str = None):
+    try:
+        post = get_post_by_id(post_id)
+        superadmin = get_superadmin()
+        if not superadmin:
+            logger.error("No superadmin found — cannot escalate post %s", post_id)
+            return
+
+        raw_token = generate_confirmation_token()
+        hashed    = hash_token(raw_token)
+        save_superadmin_token(post_id, hashed)
+        update_post_status(post_id, "awaiting_superadmin_approval")
+
+        user = get_user_by_id(post["user_id"])
+        scheduled_at = post["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
+
+        approve_url = f"{BASE_URL}/approvals/{post_id}/superadmin-approve?token={raw_token}"
+        reject_url  = f"{BASE_URL}/approvals/{post_id}/superadmin-reject?token={raw_token}"
+
+        send_superadmin_approval_email(
+            to_email     = superadmin["email"],
+            post_content = post["content_text"],
+            platforms    = post["platforms"],
+            scheduled_at = scheduled_at,
+            approve_url  = approve_url,
+            reject_url   = reject_url,
+            hr_status    = hr_status,
+            hr_reason    = hr_reason,
+            user_email   = user["email"],
+            brand_name   = ""
+        )
+        send_hr_decision_notify_email(
+            to_email     = user["email"],
+            post_content = post["content_text"],
+            hr_status    = hr_status,
+            reason       = hr_reason
+        )
+        logger.info("Post %s escalated to superadmin (HR: %s)", post_id, hr_status)
+    except Exception:
+        logger.exception("Failed to escalate post %s to superadmin", post_id)
 
 @celery_app.task(name="tasks.expiry_checker_task")
 def expiry_checker_task():
@@ -81,7 +124,6 @@ def expiry_checker_task():
     if not posts:
         logger.info("No expired posts found")
         return
-
     for post in posts:
         try:
             update_post_status(post["id"], "expired")
@@ -113,30 +155,22 @@ def publish_post_task(self, post_id: int):
         if not post:
             logger.warning("Post %s not found", post_id)
             return
-
         if post["status"] == "posted":
             logger.info("Post %s already published", post_id)
             return
-
         update_post_status(post_id, "posting")
-
         existing_targets = get_targets_for_post(post_id)
         if not existing_targets:
             create_post_targets(post_id, post["platforms"])
-
         success_platforms = []
         failed_platforms  = []
-
         logger.info("Platforms to publish: %s", post['platforms'])
-
         for platform in post["platforms"]:
             logger.info("Attempting publish for %s", platform)
             try:
                 access_token = check_and_refresh_token(post["user_id"], platform)
-
                 if not access_token:
                     raise Exception(f"No valid token for {platform}")
-
                 if platform == "facebook":
                     result = _publish_to_facebook(post, access_token)
                 elif platform == "instagram":
@@ -145,22 +179,18 @@ def publish_post_task(self, post_id: int):
                     result = _publish_to_linkedin(post, access_token)
                 else:
                     raise Exception(f"Unknown platform: {platform}")
-
                 if result["success"]:
                     update_target_status(post_id, platform, "posted")
                     success_platforms.append(platform)
                     logger.info("Posted to %s", platform)
                 else:
                     raise Exception(result.get("error", "Unknown error"))
-
             except Exception as platform_error:
                 update_target_status(post_id, platform, "failed", str(platform_error))
                 failed_platforms.append(platform)
                 logger.error("Failed to post to %s: %s", platform, platform_error)
-
-        user         = get_user_by_id(post["user_id"])
+        user = get_user_by_id(post["user_id"])
         published_at = datetime.now(timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
-
         if success_platforms and not failed_platforms:
             update_post_status(post_id, "posted")
             send_success_email(
@@ -170,7 +200,6 @@ def publish_post_task(self, post_id: int):
                 published_at = published_at
             )
             logger.info("Post %s published successfully on: %s", post_id, success_platforms)
-
         elif success_platforms and failed_platforms:
             update_post_status(post_id, "posted")
             send_success_email(
@@ -180,7 +209,6 @@ def publish_post_task(self, post_id: int):
                 published_at = published_at
             )
             logger.warning("Post %s partially published. Success: %s, Failed: %s", post_id, success_platforms, failed_platforms)
-
         else:
             update_post_status(post_id, "failed")
             send_failure_email(
@@ -190,9 +218,7 @@ def publish_post_task(self, post_id: int):
                 error            = "All platforms failed to publish"
             )
             logger.error("Post %s failed on all platforms: %s", post_id, failed_platforms)
-
         _generate_next_occurrence(post)
-
     except Exception as e:
         logger.exception("publish_post_task failed for post %s", post_id)
         update_post_status(post_id, "failed")
@@ -201,12 +227,10 @@ def publish_post_task(self, post_id: int):
 def _publish_to_facebook(post: dict, access_token: str) -> dict:
     import httpx
     from database import get_social_account
-
     account = get_social_account(post["user_id"], "facebook")
     page_id = account["page_id"]
     media_url = post.get("media_url")
     is_video  = _is_video_url(media_url)
-
     for attempt in range(3):
         try:
             if media_url and is_video:
@@ -241,11 +265,9 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
                     },
                     timeout=30.0
                 )
-
             data = response.json()
             if "id" in data:
                 return {"success": True, "post_id": data["id"]}
-
             logger.error("Facebook publish failed: %s", data)
             return {
                 "success": False,
@@ -612,6 +634,7 @@ def _generate_next_occurrence(post: dict):
     except Exception as e:
         logger.exception("Failed to generate next occurrence")
 
+
 @celery_app.task(name="tasks.generate_ai_posts_task")
 def generate_ai_posts_task(user_id: int):
     logger.info("Running AI post generation for user %s...", user_id)
@@ -626,7 +649,7 @@ def generate_ai_posts_task(user_id: int):
             logger.error("User %s not found", user_id)
             return
 
-        BASE_URL = os.getenv("BASE_URL", "http://localhost:8001")
+        BASE_URL = os.getenv("BASE_URL")
 
         for post_data in posts:
             try:
@@ -666,9 +689,8 @@ def generate_ai_posts_task(user_id: int):
                 template_id = template["id"]
                 post = execute_query("""
                     INSERT INTO scheduled_posts
-                        (template_id, scheduled_at, status,
-                         ai_generated, trigger_type, trigger_name)
-                    VALUES (%s, %s, 'awaiting_approval', TRUE, %s, %s)
+                        (template_id, scheduled_at, status, ai_generated, trigger_type, trigger_name)
+                    VALUES (%s, %s, 'awaiting_hr_approval', TRUE, %s, %s)   -- ← change here
                     RETURNING id
                 """, (
                     template_id,
@@ -681,11 +703,12 @@ def generate_ai_posts_task(user_id: int):
                     continue
 
                 post_id = post["id"]
+                create_approval_stage(post_id)
                 raw_token   = generate_confirmation_token()
                 hashed      = hash_token(raw_token)
                 save_confirmation_token(post_id, hashed)
-                approve_url  = f"{BASE_URL}/approvals/{post_id}/approve?token={raw_token}"
-                reject_url   = f"{BASE_URL}/approvals/{post_id}/reject?token={raw_token}"
+                approve_url = f"{BASE_URL}/approvals/{post_id}/hr-approve?token={raw_token}"
+                reject_url  = f"{BASE_URL}/approvals/{post_id}/hr-reject?token={raw_token}"
                 scheduled_str = post_data["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
                 send_confirmation_email(
                     to_email     = user["email"],
@@ -710,6 +733,7 @@ def generate_ai_posts_task(user_id: int):
 
     except Exception as e:
         logger.exception("generate_ai_posts_task failed for user %s", user_id)
+
 
 @celery_app.task(name="tasks.generate_ai_posts_for_all_users")
 def generate_ai_posts_for_all_users():

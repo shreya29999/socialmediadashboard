@@ -366,9 +366,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <label>Password</label>
         <input type="password" id="login-password" placeholder="••••••••" value="demo1234">
       </div>
+      <div class="form-group">
+        <label>Login as</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" class="option-btn selected" id="role-btn-user" style="flex:1;min-width:100px;" onclick="setLoginRole('user',this)">👤 User</button>
+          <button type="button" class="option-btn" id="role-btn-admin" style="flex:1;min-width:100px;" onclick="setLoginRole('admin',this)">🛡️ Admin</button>
+          <button type="button" class="option-btn" id="role-btn-superadmin" style="flex:1;min-width:110px;" onclick="setLoginRole('superadmin',this)">🌐 SuperAdmin</button>
+        </div>
+      </div>
       <button class="btn-primary" id="btn-login" onclick="doLogin()"><span id="login-label">Sign in</span></button>
       <div class="divider"><span>or</span></div>
       <button class="btn-primary" style="background:#f1f1ef;color:var(--text);margin-top:0;" onclick="quickDemo()">Continue as demo user</button>
+      <button class="btn-primary" style="background:var(--warning-bg);color:var(--warning-text);margin-top:8px;" onclick="quickDemo('superadmin')">Continue as demo SuperAdmin</button>
       <div class="auth-switch">No account? <a onclick="showScreen('screen-register')">Sign up free</a></div>
     </div>
   </div>
@@ -387,6 +396,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       <div class="form-group"><label>Your name</label><input type="text" id="reg-name" placeholder="Shreya Kapoor"></div>
       <div class="form-group"><label>Email</label><input type="email" id="reg-email" placeholder="you@email.com"></div>
       <div class="form-group"><label>Password</label><input type="password" id="reg-password" placeholder="min 6 characters"></div>
+      <div class="form-group">
+        <label>Account type</label>
+        <select id="reg-role" class="quest-select">
+          <option value="user">Standard user</option>
+          <option value="superadmin">SuperAdmin</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Invite code (optional)</label>
+        <input type="text" id="reg-invite-code" placeholder="If you were invited by an admin">
+      </div>
+      <div class="form-group">
+        <label>Admin email (optional)</label>
+        <input type="email" id="reg-admin-email" placeholder="admin@company.com">
+      </div>
       <button class="btn-primary" id="btn-register" onclick="doRegister()">Create account</button>
       <div class="auth-switch">Already have an account? <a onclick="showScreen('screen-login')">Sign in</a></div>
     </div>
@@ -943,6 +967,163 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
 <div id="toast"></div>
 
+
+<div class="modal-overlay" id="repost-modal">
+  <div class="modal-box">
+    <h3>↺ Repost</h3>
+    <p>Edit content or platforms, then pick a new schedule. Goes through HR → SuperAdmin approval.</p>
+    <div class="form-group">
+      <label>Content</label>
+      <textarea class="compose-textarea" id="repost-text" style="height:80px;"></textarea>
+    </div>
+    <div class="form-group" style="margin-top:10px;">
+      <label>Platforms</label>
+      <div class="plat-toggles" style="margin-top:6px;">
+        <label class="plat-toggle-label"><input type="checkbox" id="rp-chk-fb"> Facebook</label>
+        <label class="plat-toggle-label"><input type="checkbox" id="rp-chk-ig"> Instagram</label>
+        <label class="plat-toggle-label"><input type="checkbox" id="rp-chk-li"> LinkedIn</label>
+      </div>
+    </div>
+    <div class="form-group" style="margin-top:10px;">
+      <label>Schedule date & time</label>
+      <input type="datetime-local" class="compose-dt" id="repost-dt" style="width:100%;margin-top:6px;">
+    </div>
+    <div class="modal-btns">
+      <button class="btn-secondary" onclick="closeRepostModal()">Cancel</button>
+      <button class="btn-primary" style="width:auto;margin-top:0;" onclick="confirmRepost()">Schedule Repost</button>
+    </div>
+  </div>
+</div>
+
+
+<div class="screen" id="screen-admin">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-icon"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+      SocialDesk — Admin
+    </div>
+    <div class="topbar-right">
+      <span class="badge badge-warning">Admin</span>
+      <button class="btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="dash-body">
+    <div class="page-header">
+      <div class="page-header-left">
+        <h2>Admin Dashboard</h2>
+        <p>Manage your assigned users and their content.</p>
+      </div>
+      <div class="tabs">
+        <button class="tab active" id="admin-tab-users" onclick="adminTab('users')">Users</button>
+        <button class="tab" id="admin-tab-posts" onclick="adminTab('posts')">Posts</button>
+      </div>
+    </div>
+
+    <div id="admin-panel-users">
+      <div class="card">
+        <div class="card-title">➕ Add managed user</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;flex-wrap:wrap;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Email</label>
+            <input type="email" id="admin-user-email" placeholder="user@company.com">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Password</label>
+            <input type="password" id="admin-user-password" placeholder="Temporary password">
+          </div>
+          <button class="btn-primary" style="width:auto;margin-top:0;" onclick="createManagedUser()">Create user</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">👥 Your users</div>
+        <div id="admin-users-list"><div class="empty-state">Loading...</div></div>
+      </div>
+    </div>
+
+    <div id="admin-panel-posts" style="display:none;">
+      <div class="card">
+        <div class="card-title">📋 Posts for your users</div>
+        <div id="admin-posts-list"><div class="empty-state">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="screen-superadmin">
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-icon"><svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></div>
+      SocialDesk — SuperAdmin
+    </div>
+    <div class="topbar-right">
+      <span class="badge badge-warning">SuperAdmin</span>
+      <button class="btn-secondary" style="font-size:12px;padding:6px 12px;" onclick="doLogout()">Sign out</button>
+    </div>
+  </div>
+  <div class="dash-body">
+    <div class="page-header">
+      <div class="page-header-left">
+        <h2>SuperAdmin Dashboard</h2>
+        <p>Full oversight of all users and posts.</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="tab active" id="sa-tab-pending" onclick="saTab('pending')">Pending Review</button>
+        <button class="tab" id="sa-tab-all" onclick="saTab('all')">All Posts</button>
+        <button class="tab" id="sa-tab-users" onclick="saTab('users')">Users</button>
+      </div>
+    </div>
+
+    <!-- Pending -->
+    <div id="sa-panel-pending">
+      <div class="card">
+        <div class="card-title">🔍 Posts awaiting your approval <span class="count-badge" id="sa-pending-count">0</span></div>
+        <div id="sa-pending-list"><div class="empty-state">No posts pending your review.</div></div>
+      </div>
+    </div>
+
+    <!-- All Posts -->
+    <div id="sa-panel-all" style="display:none;">
+      <div class="card">
+        <div class="card-title">📋 All posts across all users</div>
+        <div class="tabs" style="margin-bottom:1rem;">
+          <button class="tab active" onclick="loadSAAllPosts(null,this)">All</button>
+          <button class="tab" onclick="loadSAAllPosts('awaiting_superadmin_approval',this)">Awaiting SA</button>
+          <button class="tab" onclick="loadSAAllPosts('awaiting_hr_approval',this)">Awaiting HR</button>
+          <button class="tab" onclick="loadSAAllPosts('posted',this)">Posted</button>
+          <button class="tab" onclick="loadSAAllPosts('cancelled',this)">Cancelled</button>
+        </div>
+        <div id="sa-all-list"><div class="empty-state">Loading...</div></div>
+      </div>
+    </div>
+
+    <!-- Users -->
+    <div id="sa-panel-users" style="display:none;">
+      <div class="card">
+        <div class="card-title">�️ Create admin account</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;flex-wrap:wrap;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Email</label>
+            <input type="email" id="sa-admin-email" placeholder="admin@company.com">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Password</label>
+            <input type="password" id="sa-admin-password" placeholder="Create password">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Invite code (optional)</label>
+            <input type="text" id="sa-admin-invite" placeholder="Optional invite code">
+          </div>
+          <button class="btn-primary" style="width:auto;margin-top:0;" onclick="createAdminAccount()">Create admin</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">�👥 All users</div>
+        <div id="sa-users-list"><div class="empty-state">Loading...</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const API_BASE = 'http://localhost:8001';
 
@@ -952,7 +1133,8 @@ let state = {
   posts: [], nextId: 1,
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   logFilter: 'all', rejectPostId: null,
-  userProfile: null
+  userProfile: null,
+  role:null
 };
 
 // Questionnaire data
@@ -1023,6 +1205,16 @@ function getInitials(name) { return name ? name.split(' ').map(w=>w[0]).join('')
 function greetingText() { const h=new Date().getHours(); return h<12?'Good morning':h<17?'Good afternoon':'Good evening'; }
 function esc(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+
+
+let selectedLoginRole = 'user';
+function setLoginRole(role, btn) {
+  selectedLoginRole = role;
+  document.querySelectorAll('#role-btn-user,#role-btn-admin,#role-btn-superadmin').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+
 // ═══ AUTH ═══
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
@@ -1033,9 +1225,19 @@ async function doLogin() {
   const btn = document.getElementById('btn-login');
   btn.disabled = true; document.getElementById('login-label').textContent = 'Signing in...';
   try {
-    const res = await apiPost('/auth/login', { email, password: pass });
-    state.token = res.access_token;
-    state.user = { email: res.email || email, name: email.split('@')[0], initials: getInitials(email.split('@')[0]) };
+    const res = await apiPost('/auth/login', { email, password: pass, role: selectedLoginRole });
+      state.token = res.access_token;
+      state.user = { email: res.email || email, name: email.split('@')[0], initials: getInitials(email.split('@')[0]) };
+      state.role = res.role || selectedLoginRole;
+      saveState();
+      if (state.role === 'superadmin') {
+        goSuperAdminDashboard();
+        return;
+      }
+      if (state.role === 'admin') {
+        goAdminDashboard();
+        return;
+      }
     saveState();
     await refreshPlatformStatus();
     await loadUserProfile();
@@ -1043,6 +1245,8 @@ async function doLogin() {
   } catch(e) { errEl.textContent = e.message; errEl.style.display='block'; }
   finally { btn.disabled=false; document.getElementById('login-label').textContent='Sign in'; }
 }
+
+
 
 async function doRegister() {
   const name = document.getElementById('reg-name').value.trim();
@@ -1055,10 +1259,24 @@ async function doRegister() {
   const btn = document.getElementById('btn-register');
   btn.disabled = true;
   try {
-    const res = await apiPost('/auth/register', { email, password: pass, timezone: 'UTC' });
+    const role = document.getElementById('reg-role').value;
+    const inviteCode = document.getElementById('reg-invite-code').value.trim();
+    const adminEmail = document.getElementById('reg-admin-email').value.trim();
+    let res;
+    if (role === 'superadmin') {
+      res = await apiPost('/superadmin/create', { email, password: pass, timezone: 'UTC' });
+    } else {
+      res = await apiPost('/auth/register', { email, password: pass, timezone: 'UTC', invite_code: inviteCode || null, admin_email: adminEmail || null });
+    }
     state.token = res.access_token;
-    state.user = { email: res.email||email, name, initials: getInitials(name) };
+    state.user = { email: res.email || email, name, initials: getInitials(name) };
+    state.role = res.role || role;
     saveState();
+    if (state.role === 'superadmin') {
+      goSuperAdminDashboard();
+      toast('SuperAdmin account created ✅');
+      return;
+    }
     await refreshPlatformStatus();
     showScreen('screen-connect');
     toast('Account created! Connect your platforms.');
@@ -1066,7 +1284,20 @@ async function doRegister() {
   finally { btn.disabled=false; }
 }
 
-function quickDemo() {
+function quickDemo(role) {
+  role = role || 'user';
+
+  if (role === 'superadmin') {
+    state.role = 'superadmin';
+    state.user = { email: 'admin@shilsha.com', name: 'Super Admin', initials: 'SA' };
+    state.token = null; // demo mode, no real backend token
+    saveState();
+    goSuperAdminDashboard();
+    toast('Signed in as SuperAdmin (demo)');
+    return;
+  }
+
+  state.role = 'user';
   state.user = { email: 'shreya@gmail.com', name: 'Shreya', initials: 'SK' };
   state.platforms = { facebook: true, instagram: false, linkedin: true };
   const now = new Date();
@@ -1080,6 +1311,7 @@ function quickDemo() {
   saveState();
   goDashboard();
 }
+
 
 function doLogout() {
   state.user=null; state.token=null; state.posts=[];
@@ -1283,7 +1515,7 @@ function renderAll() {
 function updateMetrics() {
   document.getElementById('m-scheduled').textContent = state.posts.filter(p=>p.status==='scheduled').length;
   document.getElementById('m-published').textContent = state.posts.filter(p=>p.status==='posted').length;
-  document.getElementById('m-pending').textContent   = state.posts.filter(p=>p.status==='awaiting_approval').length;
+  document.getElementById('m-pending').textContent = state.posts.filter(p=>['awaiting_hr_approval','awaiting_superadmin_approval'].includes(p.status)).length;
 }
 
 // ═══ AI GENERATION ═══
@@ -1335,7 +1567,7 @@ async function askRAG() {
 
 function renderAISuggestions() {
   // AI posts are awaiting_approval with ai_generated flag OR just show all awaiting_approval separately
-  const aiPosts = state.posts.filter(p => p.status==='awaiting_approval' && p.ai_generated);
+  const aiPosts = state.posts.filter(p => p.status==='awaiting_hr_approval' && p.ai_generated);
   const section = document.getElementById('ai-section');
   const list = document.getElementById('ai-list');
   document.getElementById('ai-count').textContent = aiPosts.length;
@@ -1364,7 +1596,7 @@ function renderAISuggestions() {
 
 // ═══ APPROVALS (manual) ═══
 function renderApprovals() {
-  const pending = state.posts.filter(p => p.status==='awaiting_approval' && !p.ai_generated);
+  const pending = state.posts.filter(p => p.status==='awaiting_hr_approval' && !p.ai_generated);
   const section = document.getElementById('approval-section');
   const list = document.getElementById('approval-list');
   document.getElementById('approval-count').textContent = pending.length;
@@ -1528,7 +1760,8 @@ function renderActivityLog() {
           <span>${fmtShort(p.scheduledAt)}</span>
           <div class="post-plats">${renderPlatChips(p.platforms)}</div>
           ${p.ai_generated?'<span class="badge badge-ai">AI</span>':''}
-          ${p.status==='scheduled'?`<button class="btn-skip-sm" onclick="skipPost(${p.id})">Skip</button>`:''}
+          ${p.status === 'scheduled' ? `<button class="btn-skip-sm" onclick="skipPost(${p.id})">Skip</button>` : ''}
+          ${p.status === 'posted' ? `<button class="btn-skip-sm" style="color:var(--info-text);border-color:var(--info-text);" onclick="openRepostModal(${p.id})">↺ Repost</button>` : ''}
         </div>
       </div>
     </div>`).join('');
@@ -1572,7 +1805,16 @@ function shiftMonth(dir){
 
 // ═══ HELPERS ═══
 function statusBadge(s){
-  const map={scheduled:['badge-info','Scheduled'],awaiting_approval:['badge-warning','Awaiting'],posted:['badge-success','Published'],failed:['badge-danger','Failed'],cancelled:['badge-gray','Cancelled'],skipped:['badge-gray','Skipped']};
+  const map={
+    scheduled:['badge-info','Scheduled'],
+    awaiting_approval:['badge-warning','Awaiting HR'],
+    awaiting_hr_approval:['badge-warning','Awaiting HR'],
+    awaiting_superadmin_approval:['badge-ai','Awaiting SA'],
+    posted:['badge-success','Published'],
+    failed:['badge-danger','Failed'],
+    cancelled:['badge-gray','Cancelled'],
+    skipped:['badge-gray','Skipped']
+};
   const[cls,label]=map[s]||['badge-gray',s];
   return `<span class="badge ${cls}">${label}</span>`;
 }
@@ -1696,7 +1938,13 @@ window.addEventListener('DOMContentLoaded', async () => {
     try {
       await refreshPlatformStatus();
       await loadUserProfile();
-      goDashboard();
+      if (state.role === 'superadmin') {
+          goSuperAdminDashboard();
+      } else if (state.role === 'admin') {
+          goAdminDashboard();
+      } else {
+          goDashboard();
+      }
     } catch(e) {
       state.token=null; state.user=null; saveState(); showScreen('screen-login');
     }
@@ -1707,6 +1955,291 @@ window.addEventListener('DOMContentLoaded', async () => {
   }
   renderCalendar(); updateConnectScreen();
 });
+
+
+let repostSourceId = null;
+
+function openRepostModal(id) {
+    const post = state.posts.find(p => p.id === id);
+    if (!post) return;
+    repostSourceId = id;
+    document.getElementById('repost-text').value = post.content;
+    document.getElementById('rp-chk-fb').checked = post.platforms.includes('facebook');
+    document.getElementById('rp-chk-ig').checked = post.platforms.includes('instagram');
+    document.getElementById('rp-chk-li').checked = post.platforms.includes('linkedin');
+    const n = new Date(); n.setDate(n.getDate() + 1); n.setHours(9, 0);
+    const pad = v => String(v).padStart(2, '0');
+    document.getElementById('repost-dt').value =
+        `${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}T${pad(n.getHours())}:${pad(n.getMinutes())}`;
+    document.getElementById('repost-modal').classList.add('open');
+}
+
+function closeRepostModal() {
+    document.getElementById('repost-modal').classList.remove('open');
+    repostSourceId = null;
+}
+
+async function confirmRepost() {
+    const text = document.getElementById('repost-text').value.trim();
+    if (!text) { toast('Content cannot be empty'); return; }
+    const dt = document.getElementById('repost-dt').value;
+    if (!dt || new Date(dt) < new Date()) { toast('Pick a future date and time'); return; }
+    const platforms = [
+        document.getElementById('rp-chk-fb').checked && 'facebook',
+        document.getElementById('rp-chk-ig').checked && 'instagram',
+        document.getElementById('rp-chk-li').checked && 'linkedin'
+    ].filter(Boolean);
+    if (!platforms.length) { toast('Select at least one platform'); return; }
+    try {
+        await apiPost(`/posts/${repostSourceId}/repost`, {
+            content_text    : text,
+            platforms,
+            recurrence_type : 'ONE_TIME',
+            interval_days   : 1,
+            start_date      : new Date(dt).toISOString()
+        });
+        closeRepostModal();
+        toast('↺ Repost scheduled ✅ Goes through HR → SuperAdmin approval');
+        await loadPostsFromBackend();
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+
+function goAdminDashboard() {
+    showScreen('screen-admin');
+    adminTab('users');
+    loadPostsFromBackend();
+    loadAdminUsers();
+}
+
+function adminTab(tab) {
+    ['users','posts'].forEach(t => {
+        document.getElementById(`admin-panel-${t}`).style.display = t === tab ? 'block' : 'none';
+        document.getElementById(`admin-tab-${t}`)?.classList.toggle('active', t === tab);
+    });
+    if (tab === 'posts') renderAdminPosts();
+}
+
+async function createManagedUser() {
+    const email = document.getElementById('admin-user-email').value.trim();
+    const password = document.getElementById('admin-user-password').value;
+    if (!email || !password) {
+        toast('Please fill in email and password');
+        return;
+    }
+    try {
+        await apiPost('/admin/users', { email, password });
+        document.getElementById('admin-user-email').value = '';
+        document.getElementById('admin-user-password').value = '';
+        await loadAdminUsers();
+        toast('Managed user created ✅');
+    } catch(e) {
+        toast('Error: ' + e.message);
+    }
+}
+
+async function loadAdminUsers() {
+    try {
+        const data = await apiGet('/admin/users');
+        const users = data.users || [];
+        if (!users.length) {
+            document.getElementById('admin-users-list').innerHTML = '<div class="empty-state">No users assigned yet.</div>';
+            return;
+        }
+        document.getElementById('admin-users-list').innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="border-bottom:2px solid var(--border);text-align:left;">
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">User</th>
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">Role</th>
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">Last login</th>
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">Posts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${users.map(u => `
+                    <tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:10px 6px;">
+                            <div style="font-weight:500;">${esc(u.email)}</div>
+                            ${u.brand_name ? `<div style="font-size:11px;color:var(--text-muted);">${esc(u.brand_name)}</div>` : ''}
+                        </td>
+                        <td style="padding:10px 6px;"><span class="badge badge-gray">${esc(u.role || 'user')}</span></td>
+                        <td style="padding:10px 6px;color:var(--text-muted);">${u.last_login_at ? fmtShort(u.last_login_at) : 'Never'}</td>
+                        <td style="padding:10px 6px;font-weight:600;">${u.total_posts || 0}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    } catch(e) {
+        toast('Error loading users: ' + e.message);
+    }
+}
+
+function renderAdminPosts() {
+    const list = document.getElementById('admin-posts-list');
+    if (!state.posts.length) {
+        list.innerHTML = '<div class="empty-state">No posts yet for your users.</div>';
+        return;
+    }
+    list.innerHTML = state.posts.map(p => `
+        <div class="post-item">
+            <div class="post-preview">${esc((p.content||'').substring(0,90))}${(p.content||'').length>90?'...':''}</div>
+            <div class="post-meta">
+                ${statusBadge(p.status)}
+                <span>${fmtShort(p.scheduledAt)}</span>
+                <div class="post-plats">${renderPlatChips(p.platforms)}</div>
+            </div>
+        </div>`).join('');
+}
+
+function goSuperAdminDashboard() {
+    showScreen('screen-superadmin');
+    saTab('pending');
+}
+
+function saTab(tab) {
+    ['pending','all','users'].forEach(t => {
+        document.getElementById(`sa-panel-${t}`).style.display = t === tab ? 'block' : 'none';
+        document.getElementById(`sa-tab-${t}`)?.classList.toggle('active', t === tab);
+    });
+    if (tab === 'pending') loadSAPending();
+    if (tab === 'all')     loadSAAllPosts(null);
+    if (tab === 'users')   loadSAUsers();
+}
+
+async function loadSAPending() {
+    try {
+        const data = await apiGet('/superadmin/pending');
+        const posts = data.pending || [];
+        document.getElementById('sa-pending-count').textContent = posts.length;
+        if (!posts.length) {
+            document.getElementById('sa-pending-list').innerHTML = '<div class="empty-state">No posts pending your review 🎉</div>';
+            return;
+        }
+        document.getElementById('sa-pending-list').innerHTML = posts.map(p => `
+            <div class="approval-card" style="border-color:${p.hr_status==='rejected'?'rgba(153,27,27,0.3)':'rgba(47,107,16,0.3)'};">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <span class="badge ${p.hr_status==='approved'?'badge-success':'badge-danger'}">
+                        HR: ${p.hr_status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                    </span>
+                    <span style="font-size:11px;color:var(--text-muted);">by ${esc(p.user_email)}</span>
+                    ${p.brand_name ? `<span class="badge badge-gray">${esc(p.brand_name)}</span>` : ''}
+                </div>
+                ${p.hr_rejection_reason ? `<div style="font-size:12px;color:var(--danger-text);margin-bottom:6px;">HR reason: ${esc(p.hr_rejection_reason)}</div>` : ''}
+                <div class="approval-content">"${esc((p.content_text||'').substring(0,120))}..."</div>
+                <div class="approval-meta">
+                    <span>🕐 ${fmtDate(p.scheduled_at)}</span>·
+                    <div class="post-plats">${renderPlatChips(p.platforms)}</div>
+                </div>
+                <div class="approval-btns">
+                    <button class="btn-approve" onclick="saApprove(${p.id})">✅ Approve & Publish</button>
+                    <button class="btn-reject-sm" onclick="saReject(${p.id})">❌ Reject</button>
+                </div>
+            </div>`).join('');
+    } catch(e) { toast('Error loading pending: ' + e.message); }
+}
+
+async function loadSAAllPosts(status, btn) {
+    if (btn) {
+        btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+    }
+    try {
+        const url = status ? `/superadmin/posts?status=${status}` : '/superadmin/posts';
+        const data = await apiGet(url);
+        const posts = data.posts || [];
+        if (!posts.length) {
+            document.getElementById('sa-all-list').innerHTML = '<div class="empty-state">No posts found.</div>';
+            return;
+        }
+        document.getElementById('sa-all-list').innerHTML = posts.map(p => `
+            <div class="post-item">
+                <div class="post-preview">${esc((p.content_text||'').substring(0,80))}...</div>
+                <div class="post-meta">
+                    ${statusBadge(p.status)}
+                    <span style="font-size:11px;color:var(--text-muted);">${esc(p.user_email)}</span>
+                    ${p.hr_status ? `<span class="badge ${p.hr_status==='approved'?'badge-success':'badge-danger'}" style="font-size:10px;">HR: ${p.hr_status}</span>` : ''}
+                    ${p.superadmin_status && p.superadmin_status !== 'pending' ? `<span class="badge badge-info" style="font-size:10px;">SA: ${p.superadmin_status}</span>` : ''}
+                    <span>${fmtShort(p.scheduled_at)}</span>
+                    <div class="post-plats">${renderPlatChips(p.platforms)}</div>
+                </div>
+            </div>`).join('');
+    } catch(e) { toast('Error loading posts: ' + e.message); }
+}
+
+async function createAdminAccount() {
+    const email = document.getElementById('sa-admin-email').value.trim();
+    const password = document.getElementById('sa-admin-password').value;
+    const inviteCode = document.getElementById('sa-admin-invite').value.trim();
+    if (!email || !password) {
+        toast('Please fill in email and password');
+        return;
+    }
+    try {
+        await apiPost('/superadmin/admins', { email, password, invite_code: inviteCode || null });
+        document.getElementById('sa-admin-email').value = '';
+        document.getElementById('sa-admin-password').value = '';
+        document.getElementById('sa-admin-invite').value = '';
+        toast('Admin account created ✅');
+        loadSAUsers();
+    } catch(e) {
+        toast('Error: ' + e.message);
+    }
+}
+
+async function loadSAUsers() {
+    try {
+        const data = await apiGet('/superadmin/users');
+        const users = data.users || [];
+        if (!users.length) {
+            document.getElementById('sa-users-list').innerHTML = '<div class="empty-state">No users found.</div>';
+            return;
+        }
+        document.getElementById('sa-users-list').innerHTML = `
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr style="border-bottom:2px solid var(--border);text-align:left;">
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">User</th>
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">Persona</th>
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">Platforms</th>
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">Last Login</th>
+                        <th style="padding:8px 6px;color:var(--text-muted);font-weight:600;">Total Posts</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${users.map(u => `
+                    <tr style="border-bottom:1px solid var(--border);">
+                        <td style="padding:10px 6px;">
+                            <div style="font-weight:500;">${esc(u.email)}</div>
+                            ${u.brand_name ? `<div style="font-size:11px;color:var(--text-muted);">${esc(u.brand_name)}</div>` : ''}
+                        </td>
+                        <td style="padding:10px 6px;">${u.persona ? `<span class="badge badge-gray">${esc(u.persona)}</span>` : '—'}</td>
+                        <td style="padding:10px 6px;">${renderPlatChips(u.connected_platforms || [])}</td>
+                        <td style="padding:10px 6px;color:var(--text-muted);">${u.last_login_at ? fmtShort(u.last_login_at) : 'Never'}</td>
+                        <td style="padding:10px 6px;font-weight:600;">${u.total_posts || 0}</td>
+                    </tr>`).join('')}
+                </tbody>
+            </table>`;
+    } catch(e) { toast('Error loading users: ' + e.message); }
+}
+
+async function saApprove(postId) {
+    try {
+        await apiPost(`/superadmin/posts/${postId}/approve`, {});
+        toast('✅ Post approved and queued for publishing!');
+        loadSAPending();
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function saReject(postId) {
+    const reason = prompt('Rejection reason (optional):');
+    try {
+        await apiPost(`/superadmin/posts/${postId}/reject`, { token: '', reason: reason || '' });
+        toast('❌ Post rejected.');
+        loadSAPending();
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+
 </script>
 </body>
 </html>

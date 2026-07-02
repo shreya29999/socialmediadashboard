@@ -6,6 +6,7 @@
 # Section 6: Scheduled Post Queries
 # Section 7: Post Target Queries
 # Section 8: Approval Queries
+# Section 9: SuperAdmin Queries
 
 import psycopg2
 from psycopg2 import pool
@@ -78,9 +79,19 @@ def create_schema():
                     email           VARCHAR(255) UNIQUE NOT NULL,
                     password_hash   TEXT NOT NULL,
                     timezone        VARCHAR(100) DEFAULT 'UTC',
+                    role            VARCHAR(20) DEFAULT 'user',
+                    admin_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                    invite_code     VARCHAR(50),
+                    last_login_at   TIMESTAMP,
                     created_at      TIMESTAMP DEFAULT NOW()
                 );
             """)
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'user';")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL;")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_code VARCHAR(50);")
+            cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP;")
+            cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_invite_code ON users(invite_code) WHERE invite_code IS NOT NULL;")
+
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS social_accounts (
                     id                  SERIAL PRIMARY KEY,
@@ -119,19 +130,26 @@ def create_schema():
                     scheduled_at            TIMESTAMP NOT NULL,
                     confirmation_sent_at    TIMESTAMP,
                     confirmation_token      TEXT,
+                    superadmin_token        TEXT,
                     token_used              BOOLEAN DEFAULT FALSE,
+                    superadmin_token_used   BOOLEAN DEFAULT FALSE,
                     status                  VARCHAR(50) DEFAULT 'scheduled',
                     approved_at             TIMESTAMP,
                     rejection_reason        TEXT,
                     ai_generated            BOOLEAN DEFAULT FALSE,
                     trigger_type            VARCHAR(50),
                     trigger_name            VARCHAR(200),
+                    reposted_from_id        INTEGER REFERENCES scheduled_posts(id) ON DELETE SET NULL,
                     created_at              TIMESTAMP DEFAULT NOW()
                 );
             """)
+            # Migrate existing scheduled_posts table
             cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS ai_generated BOOLEAN DEFAULT FALSE;")
             cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS trigger_type VARCHAR(50);")
             cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS trigger_name VARCHAR(200);")
+            cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS superadmin_token TEXT;")
+            cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS superadmin_token_used BOOLEAN DEFAULT FALSE;")
+            cur.execute("ALTER TABLE scheduled_posts ADD COLUMN IF NOT EXISTS reposted_from_id INTEGER REFERENCES scheduled_posts(id) ON DELETE SET NULL;")
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS post_targets (
@@ -147,26 +165,27 @@ def create_schema():
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS user_profiles (
                     id              SERIAL PRIMARY KEY,
-                    user_id         INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,                    
-                    persona         VARCHAR(50),    
-                    industry        VARCHAR(100), 
-                    brand_name      VARCHAR(100),                     
-                    tone            VARCHAR(50),    
-                    audience        VARCHAR(100),                      
-                    country_code    VARCHAR(5),     
-                    language        VARCHAR(20),                       
+                    user_id         INTEGER UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+                    persona         VARCHAR(50),
+                    industry        VARCHAR(100),
+                    brand_name      VARCHAR(100),
+                    tone            VARCHAR(50),
+                    audience        VARCHAR(100),
+                    country_code    VARCHAR(5),
+                    language        VARCHAR(20),
                     posts_per_week  INTEGER DEFAULT 3,
                     created_at      TIMESTAMP DEFAULT NOW(),
                     updated_at      TIMESTAMP DEFAULT NOW()
                 )
             """)
+
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS events_cache (
                     id           SERIAL PRIMARY KEY,
                     country_code VARCHAR(5),
                     event_name   VARCHAR(200),
                     event_date   DATE,
-                    event_type   VARCHAR(50),     -- national, religious, global
+                    event_type   VARCHAR(50),
                     raw_data     JSONB,
                     fetched_at   TIMESTAMP DEFAULT NOW()
                 );
@@ -175,14 +194,15 @@ def create_schema():
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS trends_cache (
                     id           SERIAL PRIMARY KEY,
-                    country_code VARCHAR(5),
-                    platform     VARCHAR(50),     -- google, instagram, general
+                    country_code VARCHAR(10),
+                    platform     VARCHAR(50),
                     topic        VARCHAR(200),
-                    score        FLOAT,           -- how trending (higher = more trending)
+                    score        FLOAT,
                     raw_data     JSONB,
                     fetched_at   TIMESTAMP DEFAULT NOW()
                 );
             """)
+            cur.execute("ALTER TABLE trends_cache ALTER COLUMN country_code TYPE VARCHAR(10);")
 
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS rag_chat_history (
@@ -198,6 +218,28 @@ def create_schema():
                 ON rag_chat_history(user_id, created_at DESC);
             """)
 
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS post_approval_stages (
+                    id                              SERIAL PRIMARY KEY,
+                    scheduled_post_id               INTEGER UNIQUE REFERENCES scheduled_posts(id) ON DELETE CASCADE,
+                    hr_status                       VARCHAR(20) DEFAULT 'pending',
+                    hr_approved_at                  TIMESTAMP,
+                    hr_rejection_reason             TEXT,
+                    superadmin_status               VARCHAR(20) DEFAULT 'pending',
+                    superadmin_approved_at          TIMESTAMP,
+                    superadmin_rejection_reason     TEXT,
+                    created_at                      TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_approval_stages_post
+                ON post_approval_stages(scheduled_post_id);
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_approval_stages_superadmin_status
+                ON post_approval_stages(superadmin_status);
+            """)
+
         conn.commit()
         print("✅ All tables created")
     except Exception as e:
@@ -211,10 +253,10 @@ def create_schema():
 # SECTION 3 — USER QUERIES
 # ================================================================
 
-def create_user(email: str, password_hash: str):
+def create_user(email: str, password_hash: str, role: str = "user", admin_id: int = None, invite_code: str = None):
     return execute_query(
-        "INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id, email",
-        (email, password_hash),
+        "INSERT INTO users (email, password_hash, role, admin_id, invite_code) VALUES (%s, %s, %s, %s, %s) RETURNING id, email, role, admin_id, invite_code",
+        (email, password_hash, role, admin_id, invite_code),
         fetch="one"
     )
 
@@ -227,9 +269,60 @@ def get_user_by_email(email: str):
 
 def get_user_by_id(user_id: int):
     return execute_query(
-        "SELECT id, email, timezone, created_at FROM users WHERE id = %s",
+        "SELECT id, email, timezone, role, admin_id, invite_code, last_login_at, created_at FROM users WHERE id = %s",
         (user_id,),
         fetch="one"
+    )
+
+def update_last_login(user_id: int):
+    return execute_query(
+        "UPDATE users SET last_login_at = NOW() WHERE id = %s",
+        (user_id,)
+    )
+
+def get_all_users():
+    """SuperAdmin: get all non-superadmin users with profile and platform info."""
+    return execute_query("""
+        SELECT
+            u.id, u.email, u.role, u.admin_id, u.last_login_at, u.created_at,
+            up.persona, up.industry, up.brand_name,
+            ARRAY(
+                SELECT platform FROM social_accounts sa WHERE sa.user_id = u.id
+            ) AS connected_platforms,
+            (SELECT COUNT(*) FROM post_templates pt WHERE pt.user_id = u.id) AS total_templates,
+            (SELECT COUNT(*) FROM scheduled_posts sp
+             JOIN post_templates pt ON sp.template_id = pt.id
+             WHERE pt.user_id = u.id) AS total_posts
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        WHERE u.role != 'superadmin'
+        ORDER BY u.created_at DESC
+    """, fetch="all")
+
+
+def get_users_for_admin(admin_id: int):
+    return execute_query("""
+        SELECT
+            u.id, u.email, u.role, u.admin_id, u.last_login_at, u.created_at,
+            up.persona, up.industry, up.brand_name,
+            ARRAY(
+                SELECT platform FROM social_accounts sa WHERE sa.user_id = u.id
+            ) AS connected_platforms,
+            (SELECT COUNT(*) FROM post_templates pt WHERE pt.user_id = u.id) AS total_templates,
+            (SELECT COUNT(*) FROM scheduled_posts sp
+             JOIN post_templates pt ON sp.template_id = pt.id
+             WHERE pt.user_id = u.id) AS total_posts
+        FROM users u
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        WHERE u.admin_id = %s AND u.role != 'superadmin'
+        ORDER BY u.created_at DESC
+    """, (admin_id,), fetch="all")
+
+
+def get_admins():
+    return execute_query(
+        "SELECT id, email, role, admin_id, invite_code FROM users WHERE role = 'admin' ORDER BY created_at DESC",
+        fetch="all"
     )
 
 
@@ -263,6 +356,7 @@ def update_access_token(account_id, new_token, new_expiry):
         "UPDATE social_accounts SET access_token = %s, token_expires_at = %s WHERE id = %s",
         (new_token, new_expiry, account_id)
     )
+
 
 # ================================================================
 # SECTION 5 — POST TEMPLATE QUERIES
@@ -314,16 +408,17 @@ def increment_occurrence_count(template_id):
 # SECTION 6 — SCHEDULED POST QUERIES
 # ================================================================
 
-def create_scheduled_post(template_id, scheduled_at):
+def create_scheduled_post(template_id, scheduled_at, reposted_from_id=None):
     return execute_query(
-        "INSERT INTO scheduled_posts (template_id, scheduled_at) VALUES (%s, %s) RETURNING id",
-        (template_id, scheduled_at), fetch="one"
+        """INSERT INTO scheduled_posts (template_id, scheduled_at, reposted_from_id)
+           VALUES (%s, %s, %s) RETURNING id""",
+        (template_id, scheduled_at, reposted_from_id), fetch="one"
     )
 
 def get_post_by_id(post_id):
     return execute_query("""
         SELECT sp.*, pt.content_text, pt.media_url, pt.platforms, pt.user_id,
-               sp.ai_generated, sp.trigger_type, sp.trigger_name
+               sp.ai_generated, sp.trigger_type, sp.trigger_name, sp.reposted_from_id
         FROM scheduled_posts sp
         JOIN post_templates pt ON sp.template_id = pt.id
         WHERE sp.id = %s
@@ -343,7 +438,7 @@ def get_posts_due_for_confirmation():
 def get_expired_awaiting_posts():
     return execute_query("""
         SELECT * FROM scheduled_posts
-        WHERE status = 'awaiting_approval'
+        WHERE status IN ('awaiting_hr_approval', 'awaiting_superadmin_approval')
         AND scheduled_at <= NOW()
     """, fetch="all")
 
@@ -363,15 +458,67 @@ def get_posts_for_calendar(user_id, start_date, end_date):
         ORDER BY sp.scheduled_at ASC
     """, (user_id, start_date, end_date), fetch="all")
 
+
+def get_posts_for_calendar_for_admin(admin_id, start_date, end_date):
+    return execute_query("""
+        SELECT sp.id, sp.scheduled_at, sp.status, pt.content_text, pt.platforms, pt.media_url
+        FROM scheduled_posts sp
+        JOIN post_templates pt ON sp.template_id = pt.id
+        JOIN users u ON pt.user_id = u.id
+        WHERE u.admin_id = %s
+        AND sp.scheduled_at BETWEEN %s AND %s
+        ORDER BY sp.scheduled_at ASC
+    """, (admin_id, start_date, end_date), fetch="all")
+
+
 def get_posts_by_status(user_id, status):
     return execute_query("""
         SELECT sp.*, pt.content_text, pt.platforms, pt.media_url,
-               sp.ai_generated, sp.trigger_type, sp.trigger_name
+               sp.ai_generated, sp.trigger_type, sp.trigger_name, sp.reposted_from_id
         FROM scheduled_posts sp
         JOIN post_templates pt ON sp.template_id = pt.id
         WHERE pt.user_id = %s AND sp.status = %s
         ORDER BY sp.scheduled_at ASC
     """, (user_id, status), fetch="all")
+
+
+def get_posts_by_status_for_admin(admin_id, status):
+    return execute_query("""
+        SELECT sp.*, pt.content_text, pt.platforms, pt.media_url,
+               sp.ai_generated, sp.trigger_type, sp.trigger_name, sp.reposted_from_id
+        FROM scheduled_posts sp
+        JOIN post_templates pt ON sp.template_id = pt.id
+        JOIN users u ON pt.user_id = u.id
+        WHERE u.admin_id = %s AND sp.status = %s
+        ORDER BY sp.scheduled_at ASC
+    """, (admin_id, status), fetch="all")
+
+def get_all_posts_for_superadmin(status_filter: str = None):
+    """SuperAdmin: get all posts across all users, optionally filtered by status."""
+    where = ""
+    params = []
+    if status_filter:
+        where = "AND sp.status = %s"
+        params.append(status_filter)
+
+    return execute_query(f"""
+        SELECT
+            sp.*,
+            pt.content_text, pt.media_url, pt.platforms, pt.user_id,
+            sp.ai_generated, sp.trigger_type, sp.trigger_name, sp.reposted_from_id,
+            u.email AS user_email,
+            up.brand_name, up.persona,
+            pas.hr_status, pas.hr_approved_at, pas.hr_rejection_reason,
+            pas.superadmin_status, pas.superadmin_approved_at, pas.superadmin_rejection_reason
+        FROM scheduled_posts sp
+        JOIN post_templates pt ON sp.template_id = pt.id
+        JOIN users u ON pt.user_id = u.id
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        LEFT JOIN post_approval_stages pas ON pas.scheduled_post_id = sp.id
+        WHERE sp.status NOT IN ('scheduled')
+        {where}
+        ORDER BY sp.created_at DESC
+    """, tuple(params) if params else None, fetch="all")
 
 
 # ================================================================
@@ -412,6 +559,14 @@ def save_confirmation_token(post_id, token):
         WHERE id = %s
     """, (token, post_id))
 
+def save_superadmin_token(post_id, token):
+    return execute_query("""
+        UPDATE scheduled_posts
+        SET superadmin_token = %s,
+            superadmin_token_used = FALSE
+        WHERE id = %s
+    """, (token, post_id))
+
 def get_post_by_token(token):
     return execute_query("""
         SELECT sp.*, pt.user_id, pt.content_text, pt.platforms
@@ -419,6 +574,15 @@ def get_post_by_token(token):
         JOIN post_templates pt ON sp.template_id = pt.id
         WHERE sp.confirmation_token = %s
         AND sp.token_used = FALSE
+    """, (token,), fetch="one")
+
+def get_post_by_superadmin_token(token):
+    return execute_query("""
+        SELECT sp.*, pt.user_id, pt.content_text, pt.platforms
+        FROM scheduled_posts sp
+        JOIN post_templates pt ON sp.template_id = pt.id
+        WHERE sp.superadmin_token = %s
+        AND sp.superadmin_token_used = FALSE
     """, (token,), fetch="one")
 
 def approve_post(post_id):
@@ -439,3 +603,85 @@ def reject_post(post_id, reason=None):
         WHERE id = %s
     """, (reason, post_id))
 
+
+# ================================================================
+# SECTION 9 — SUPERADMIN QUERIES
+# ================================================================
+
+def get_superadmin():
+    return execute_query(
+        "SELECT * FROM users WHERE role = 'superadmin' LIMIT 1",
+        fetch="one"
+    )
+
+def create_approval_stage(post_id: int):
+    return execute_query("""
+        INSERT INTO post_approval_stages (scheduled_post_id)
+        VALUES (%s)
+        ON CONFLICT (scheduled_post_id) DO NOTHING
+        RETURNING id
+    """, (post_id,), fetch="one")
+
+def get_approval_stage(post_id: int):
+    return execute_query(
+        "SELECT * FROM post_approval_stages WHERE scheduled_post_id = %s",
+        (post_id,), fetch="one"
+    )
+
+def update_hr_approval(post_id: int, status: str, reason: str = None):
+    return execute_query("""
+        UPDATE post_approval_stages
+        SET hr_status = %s,
+            hr_approved_at = CASE WHEN %s = 'approved' THEN NOW() ELSE NULL END,
+            hr_rejection_reason = %s
+        WHERE scheduled_post_id = %s
+    """, (status, status, reason, post_id))
+
+def update_superadmin_approval(post_id: int, status: str, reason: str = None):
+    return execute_query("""
+        UPDATE post_approval_stages
+        SET superadmin_status = %s,
+            superadmin_approved_at = CASE WHEN %s = 'approved' THEN NOW() ELSE NULL END,
+            superadmin_rejection_reason = %s
+        WHERE scheduled_post_id = %s
+    """, (status, status, reason, post_id))
+
+def get_posts_awaiting_superadmin():
+    return execute_query("""
+        SELECT
+            sp.*,
+            pt.content_text, pt.media_url, pt.platforms, pt.user_id,
+            sp.ai_generated, sp.trigger_type, sp.trigger_name,
+            u.email AS user_email,
+            up.brand_name, up.persona,
+            pas.hr_status, pas.hr_approved_at, pas.hr_rejection_reason,
+            pas.superadmin_status
+        FROM scheduled_posts sp
+        JOIN post_templates pt ON sp.template_id = pt.id
+        JOIN users u ON pt.user_id = u.id
+        LEFT JOIN user_profiles up ON up.user_id = u.id
+        JOIN post_approval_stages pas ON pas.scheduled_post_id = sp.id
+        WHERE sp.status = 'awaiting_superadmin_approval'
+        AND pas.superadmin_status = 'pending'
+        ORDER BY sp.scheduled_at ASC
+    """, fetch="all")
+
+def superadmin_final_approve(post_id: int):
+    update_superadmin_approval(post_id, 'approved')
+    return execute_query("""
+        UPDATE scheduled_posts
+        SET status = 'approved',
+            approved_at = NOW(),
+            superadmin_token_used = TRUE
+        WHERE id = %s
+    """, (post_id,))
+
+def superadmin_final_reject(post_id: int, reason: str = None):
+    update_superadmin_approval(post_id, 'rejected', reason)
+    return execute_query("""
+        UPDATE scheduled_posts
+        SET status = 'cancelled',
+            rejection_reason = %s,
+            superadmin_token_used = TRUE
+        WHERE id = %s
+    """, (reason, post_id))
