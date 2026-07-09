@@ -26,6 +26,30 @@ cloudinary.config(
 
 POLLINATIONS_IMAGE_URL = "https://gen.pollinations.ai/image"
 
+RATE_LIMIT_REQUESTS_PER_MINUTE = 10
+RATE_LIMIT_WINDOW_SECONDS = 60
+_user_request_timestamps = {}
+
+
+def _check_rate_limit(user_id: int) -> tuple[bool, str | None]:
+    now = datetime.now(timezone.utc)
+    window_start = now - timedelta(seconds=RATE_LIMIT_WINDOW_SECONDS)
+    recent_requests = []
+
+    if user_id in _user_request_timestamps:
+        recent_requests = [
+            ts for ts in _user_request_timestamps[user_id]
+            if ts >= window_start
+        ]
+
+    if len(recent_requests) >= RATE_LIMIT_REQUESTS_PER_MINUTE:
+        return False, "You have sent too many requests. Please wait a moment and try again."
+
+    recent_requests.append(now)
+    _user_request_timestamps[user_id] = recent_requests
+    return True, None
+
+
 async def fetch_holidays(country_code: str, year: int = None) -> list:
     if not year:
         year = datetime.now().year
@@ -331,9 +355,20 @@ def _get_query_tokens(query: str) -> set:
         if len(token) > 2 and token not in STOPWORDS
     }
 
+
 def _score_doc_text(text: str, query_tokens: set) -> int:
     tokens = _normalize_text(text).split()
     return sum(1 for t in tokens if t in query_tokens)
+
+
+def _normalize_content(text: str, max_chars: int = 800) -> str:
+    if not text:
+        return ""
+    cleaned = re.sub(r"\s+", " ", str(text)).strip()
+    if len(cleaned) > max_chars:
+        cleaned = cleaned[: max_chars - 3].rstrip() + "..."
+    return cleaned
+
 
 def _get_rag_documents(user_id: int) -> list:
     docs = []
@@ -401,6 +436,7 @@ def _get_rag_documents(user_id: int) -> list:
 
     return docs
 
+
 def retrieve_rag_documents(user_id: int, query: str, limit: int = 4) -> list:
     docs = _get_rag_documents(user_id)
     query_tokens = _get_query_tokens(query)
@@ -414,6 +450,7 @@ def retrieve_rag_documents(user_id: int, query: str, limit: int = 4) -> list:
         selected = [doc for _, doc in scored[:limit]]
     return selected
 
+
 def _get_chat_history(user_id: int, limit: int = 6) -> list:
     rows = execute_query("""
         SELECT role, content FROM rag_chat_history
@@ -421,51 +458,86 @@ def _get_chat_history(user_id: int, limit: int = 6) -> list:
         ORDER BY created_at DESC
         LIMIT %s
     """, (user_id, limit), fetch="all") or []
-    return list(reversed(rows))
+
+    cleaned_rows = []
+    for row in rows:
+        role = (row.get("role") or "user").strip().lower()
+        content = _normalize_content(row.get("content", ""), max_chars=1000)
+        if role in {"user", "assistant"} and content:
+            cleaned_rows.append({"role": role, "content": content})
+
+    return list(reversed(cleaned_rows))
 
 
 def _save_chat_turn(user_id: int, role: str, content: str):
+    cleaned_content = _normalize_content(content, max_chars=4000)
+    if not cleaned_content:
+        return
     execute_query("""
         INSERT INTO rag_chat_history (user_id, role, content)
         VALUES (%s, %s, %s)
-    """, (user_id, role, content))
+    """, (user_id, role, cleaned_content))
+
 
 def answer_rag_query(user_id: int, query: str) -> dict:
-    docs    = retrieve_rag_documents(user_id, query, limit=5)
-    sources = [f"{doc['source']} - {doc['title']}" for doc in docs]
-    context = "\n\n".join([
-        f"Source: {doc['source']}\n{doc['content']}" for doc in docs
-    ]) or "No relevant documents found."
+    if not query or not str(query).strip():
+        return {"answer": "Please tell me what you want help with.", "sources": []}
 
-    history = _get_chat_history(user_id, limit=6)
+    allowed, rate_limit_message = _check_rate_limit(user_id)
+    if not allowed:
+        return {"answer": rate_limit_message, "sources": []}
+
+    if not GROQ_API_KEY:
+        return {
+            "answer": "AI chat is currently unavailable because the Groq API key is not configured.",
+            "sources": []
+        }
+
+    docs = retrieve_rag_documents(user_id, query, limit=5)
+    sources = [f"{doc['source']} - {doc['title']}" for doc in docs if doc.get("title")]
+    context_sections = []
+    for doc in docs:
+        content = _normalize_content(doc.get("content", ""), max_chars=600)
+        if content:
+            context_sections.append(f"Source: {doc.get('source', 'Unknown')}\n{content}")
+
+    context = "\n\n".join(context_sections) if context_sections else "No relevant documents found."
+    history = _get_chat_history(user_id, limit=4)
 
     system_prompt = f"""You are a helpful social media assistant.
 Only use the information in the context below. Do not invent facts.
-If the question is outside this context, say so.
+If the question is outside this context, say so clearly and briefly.
+Keep the answer concise, practical, and directly relevant.
 Context:
 {context}"""
 
     messages = [{"role": "system", "content": system_prompt}]
     for turn in history:
         messages.append({"role": turn["role"], "content": turn["content"]})
-    messages.append({"role": "user", "content": query})
+    messages.append({"role": "user", "content": str(query).strip()})
 
     try:
         response = groq_client.chat.completions.create(
-            model       = "meta-llama/llama-4-scout-17b-16e-instruct",
-            messages    = messages,         
-            temperature = 0.2,
-            max_tokens  = 450
+            model="meta-llama/llama-4-scout-17b-16e-instruct",
+            messages=messages,
+            temperature=0.2,
+            max_tokens=450,
         )
-        answer = response.choices[0].message.content.strip()
-        _save_chat_turn(user_id, "user",      query)
+        answer = (response.choices[0].message.content or "").strip()
+        if not answer:
+            answer = "I don't have enough context to answer that right now."
+
+        _save_chat_turn(user_id, "user", query)
         _save_chat_turn(user_id, "assistant", answer)
 
         return {"answer": answer, "sources": sources}
 
     except Exception as e:
-        print(f"❌ Groq RAG query failed: {e}")
-        return {"answer": "Could not answer right now.", "sources": sources}
+        logger.exception("Groq RAG query failed for user %s", user_id)
+        return {
+            "answer": "Could not answer right now. Please try again in a moment.",
+            "sources": sources,
+        }
 
 def generate_post_content(
     profile  : dict,

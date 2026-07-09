@@ -1,12 +1,10 @@
 fastapi
-bcrypt
 uvicorn
 psycopg2-binary
 celery
 redis
 httpx
 python-jose
-passlib
 python-dotenv
 authlib
 cloudinary
@@ -16,3 +14,5 @@ croniter
 groq
 feedparser
 httpx
+passlib ==1.7.4
+bcrypt==4.0.1
