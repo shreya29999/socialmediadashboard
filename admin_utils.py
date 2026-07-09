@@ -1,8 +1,5 @@
 from typing import Optional
-
-
 def resolve_admin_for_signup(email: str, invite_code: Optional[str], admin_email: Optional[str], admins: list, domain_mapping: dict) -> Optional[dict]:
-    """Resolve the admin that should own a new regular user."""
     if invite_code:
         for admin in admins:
             if str(admin.get("invite_code") or "").strip().lower() == str(invite_code).strip().lower():
@@ -20,5 +17,4 @@ def resolve_admin_for_signup(email: str, invite_code: Optional[str], admin_email
             for admin in admins:
                 if str(admin.get("email") or "").strip().lower() == str(mapped_admin_email).strip().lower():
                     return admin
-
     return None

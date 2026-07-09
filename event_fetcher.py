@@ -96,7 +96,6 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
 
 
 def fetch_google_trends(country_code: str, industry: str) -> list:
-
     cached = execute_query("""
         SELECT id FROM trends_cache
         WHERE country_code = %s
@@ -154,21 +153,17 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
                 (country_code, platform, topic, score)
             VALUES (%s, %s, %s, %s)
         """, (country_code, 'google_news', topic, 15 - i))
-
     print(f"✅ Google News trends fetched for {country_code}: {topics[:3]}")
-
     return execute_query("""
         SELECT * FROM trends_cache
         WHERE country_code = %s AND platform = 'google_news'
         ORDER BY score DESC
     """, (country_code,), fetch="all") or []
-
 EXCLUDED_EVENT_TYPES = {
     "religious",
     "observance",      
     "national",         
 }
-
 BASE_EXCLUDED_KEYWORDS = [
     "christmas", "easter","hanukkah", "passover",
     "good friday", "navratri", "puja", "church", "mosque", "temple", "holy",
@@ -180,13 +175,11 @@ BASE_EXCLUDED_KEYWORDS = [
     "war", "attack", "shooting", "bombing", "terror", "assassination",
     "riot", "violence", "killed", "massacre", "conflict", "military strike",
 ]
-
 INDUSTRY_EXTRA_KEYWORDS = {
     "tech": [
         "martyr", "war memorial", "armed forces", "military",
     ],
 }
-
 
 def _is_blocked(text: str, industry: str) -> bool:
     if not text:
@@ -224,7 +217,6 @@ def _prefilter_trends(trends: list, industry: str) -> list:
         safe.append(t)
     return safe
 
-
 def _postfilter_groq_output(result: dict, industry: str) -> dict:
     clean_events = []
     for e in result.get("relevant_events", []):
@@ -234,7 +226,6 @@ def _postfilter_groq_output(result: dict, industry: str) -> dict:
             print(f"🚫 Post-filter dropped event: {e.get('event_name')}")
             continue
         clean_events.append(e)
-
     clean_trends = []
     for t in result.get("relevant_trends", []):
         if _is_blocked(t.get("topic", ""), industry) or _is_blocked(
@@ -255,7 +246,7 @@ def filter_relevant_events(
     events = _prefilter_events(events, industry)
     trends = _prefilter_trends(trends, industry)
     if not events and not trends:
-        return {"relevant_events": [], "relevant_trends": []}
+        return {"relevant_events": [],"relevant_trends": []}
 
     events_list = [
         f"- {e['event_name']} on {e['event_date']} (type: {e['event_type']})"
@@ -265,7 +256,6 @@ def filter_relevant_events(
         f"- {t['topic']}"
         for t in (trends or [])[:10]
     ]
-
     prompt = f"""You are a social media strategist.
 
 User Profile:
@@ -286,7 +276,6 @@ STRICT CONTENT RULES (apply to every event/trend you select AND to the angle you
 - Do NOT select or reference anything political (elections, politicians, parties, protests, government policy debates).
 - Do NOT select or reference anything violent, tragic, or related to war, conflict, attacks, or death.
 - If nothing qualifies, return empty lists. Do not force a selection.
-
 Select maximum 3 events AND maximum 3 trends most relevant 
 for this user, respecting the rules above. For each, give a specific post angle.
 
@@ -306,10 +295,9 @@ Return ONLY valid JSON, no explanation, no markdown:
     }}
   ]
 }}"""
-
     try:
         response = groq_client.chat.completions.create(
-            model       = "llama-3.3-70b-versatile",
+            model       = "meta-llama/llama-4-scout-17b-16e-instruct",
             messages    = [{"role": "user", "content": prompt}],
             temperature = 0.3,
             max_tokens  = 800
@@ -465,7 +453,7 @@ Context:
 
     try:
         response = groq_client.chat.completions.create(
-            model       = "llama-3.3-70b-versatile",
+            model       = "meta-llama/llama-4-scout-17b-16e-instruct",
             messages    = messages,         
             temperature = 0.2,
             max_tokens  = 450
@@ -531,7 +519,7 @@ Return ONLY valid JSON, no explanation, no markdown:
 
     try:
         response = groq_client.chat.completions.create(
-            model       = "llama-3.3-70b-versatile",
+            model       = "meta-llama/llama-4-scout-17b-16e-instruct",
             messages    = [{"role": "user", "content": prompt}],
             temperature = 0.7,
             max_tokens  = 500

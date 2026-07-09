@@ -30,7 +30,7 @@ celery_app.conf.update(
 
 )
 
-# SECTION 3 — BEAT SCHEDULE (What Runs automaticallyand what runs when )
+# SECTION 3 — BEAT SCHEDULE (What runs automatically and when)
 
 celery_app.conf.beat_schedule = {
     "send-confirmations-every-minute": {
@@ -41,8 +41,12 @@ celery_app.conf.beat_schedule = {
         "task"    : "tasks.expiry_checker_task",
         "schedule": 60.0,
     },
+    "publish-due-posts-every-minute": {
+        "task"    : "tasks.publish_due_posts_task",
+        "schedule": 60.0,
+    },
     "daily-ai-post-generation": {
-        "task"    : "tasks.generate_ai_posts_for_all_users",  # ← fixed
+        "task"    : "tasks.generate_ai_posts_for_all_users",
         "schedule": crontab(hour=8, minute=0),
         "options" : {"expires": 3600}
     },

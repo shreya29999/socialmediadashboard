@@ -16,23 +16,24 @@ from database import (
     save_confirmation_token,
     get_post_by_token,
     approve_post,
+    reject_post,
     increment_occurrence_count,
     get_template_by_id,
     create_scheduled_post,
     get_user_by_id,
     create_approval_stage,
     update_hr_approval,
-    save_superadmin_token,
-    get_superadmin,
+    save_admin_token,         
     get_approval_stage,
-    update_last_login
+    update_last_login,
+    get_posts_ready_to_publish 
 )
 from services import (
     send_confirmation_email,
     send_success_email,
     send_failure_email,
     send_expired_email,
-    send_superadmin_approval_email,
+    send_admin_approval_email,  
     send_hr_decision_notify_email
 )
 from utils import (
@@ -45,6 +46,8 @@ from logger import logger
 init_db()
 BASE_URL = os.getenv("BASE_URL")
 
+
+
 @celery_app.task(name="tasks.send_confirmation_task")
 def send_confirmation_task():
     logger.info("Checking for posts due for confirmation")
@@ -55,6 +58,7 @@ def send_confirmation_task():
         try:
             if post["confirmation_sent_at"]:
                 continue
+            owner = get_user_by_id(post["user_id"])
             raw_token = generate_confirmation_token()
             hashed    = hash_token(raw_token)
             save_confirmation_token(post["id"], hashed)
@@ -62,10 +66,9 @@ def send_confirmation_task():
             update_post_status(post["id"], "awaiting_hr_approval")
             approve_url = f"{BASE_URL}/approvals/{post['id']}/hr-approve?token={raw_token}"
             reject_url  = f"{BASE_URL}/approvals/{post['id']}/hr-reject?token={raw_token}"
-            user = get_user_by_id(post["user_id"])
             scheduled_at = post["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
             send_confirmation_email(
-                to_email     = user["email"],
+                to_email     = owner["email"],
                 post_content = post["content_text"],
                 platforms    = post["platforms"],
                 scheduled_at = scheduled_at,
@@ -76,27 +79,34 @@ def send_confirmation_task():
         except Exception:
             logger.exception("Failed to send confirmation for post %s", post["id"])
 
-def _escalate_to_superadmin(post_id: int, hr_status: str, hr_reason: str = None):
+def _escalate_to_admin(post_id: int, hr_status: str, hr_reason: str = None):
     try:
         post = get_post_by_id(post_id)
-        superadmin = get_superadmin()
-        if not superadmin:
-            logger.error("No superadmin found — cannot escalate post %s", post_id)
+        user = get_user_by_id(post["user_id"])
+        if not user.get("admin_id"):
+            # No admin to escalate to — the HR decision is final.
+            if hr_status == "approved":
+                approve_post(post_id)
+                publish_post_task.delay(post_id)
+                logger.info("Post %s approved (no admin on account) — queued for publishing", post_id)
+            else:
+                reject_post(post_id, hr_reason)
+                logger.info("Post %s rejected (no admin on account) — cancelled", post_id)
             return
-
+        admin = get_user_by_id(user["admin_id"])
+        if not admin:
+            logger.error("Admin %s not found — cannot escalate post %s", user["admin_id"], post_id)
+            return
         raw_token = generate_confirmation_token()
         hashed    = hash_token(raw_token)
-        save_superadmin_token(post_id, hashed)
-        update_post_status(post_id, "awaiting_superadmin_approval")
-
-        user = get_user_by_id(post["user_id"])
+        save_admin_token(post_id, hashed)
+        update_post_status(post_id, "awaiting_admin_approval")
         scheduled_at = post["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
+        approve_url = f"{BASE_URL}/approvals/{post_id}/admin-approve?token={raw_token}"
+        reject_url  = f"{BASE_URL}/approvals/{post_id}/admin-reject?token={raw_token}"
 
-        approve_url = f"{BASE_URL}/approvals/{post_id}/superadmin-approve?token={raw_token}"
-        reject_url  = f"{BASE_URL}/approvals/{post_id}/superadmin-reject?token={raw_token}"
-
-        send_superadmin_approval_email(
-            to_email     = superadmin["email"],
+        send_admin_approval_email(
+            to_email     = admin["email"],
             post_content = post["content_text"],
             platforms    = post["platforms"],
             scheduled_at = scheduled_at,
@@ -113,9 +123,10 @@ def _escalate_to_superadmin(post_id: int, hr_status: str, hr_reason: str = None)
             hr_status    = hr_status,
             reason       = hr_reason
         )
-        logger.info("Post %s escalated to superadmin (HR: %s)", post_id, hr_status)
+        logger.info("Post %s escalated to admin %s (HR: %s)", post_id, admin["id"], hr_status)
     except Exception:
-        logger.exception("Failed to escalate post %s to superadmin", post_id)
+        logger.exception("Failed to escalate post %s to admin", post_id)
+
 
 @celery_app.task(name="tasks.expiry_checker_task")
 def expiry_checker_task():
@@ -140,13 +151,28 @@ def expiry_checker_task():
         except Exception as e:
             logger.exception("Failed to process expired post %s", post["id"])
 
+
+@celery_app.task(name="tasks.publish_due_posts_task")
+def publish_due_posts_task():
+    logger.info("Checking for posts due for publishing")
+    posts = get_posts_ready_to_publish()
+    if not posts:
+        return
+    for post in posts:
+        try:
+            if post["status"] == "scheduled":
+                approve_post(post["id"])
+            publish_post_task.delay(post["id"])
+            logger.info("Post %s queued for publishing (scheduled_at reached)", post["id"])
+        except Exception:
+            logger.exception("Failed to queue due post %s", post["id"])
+
 @celery_app.task(
     name="tasks.publish_post_task",
     bind=True,
     max_retries=3,
     default_retry_delay=60
 )
-
 def publish_post_task(self, post_id: int):
     logger.info("Publishing post %s...", post_id)
 
@@ -649,7 +675,7 @@ def generate_ai_posts_task(user_id: int):
             logger.error("User %s not found", user_id)
             return
 
-        BASE_URL = os.getenv("BASE_URL")
+        created_count = 0
 
         for post_data in posts:
             try:
@@ -669,6 +695,7 @@ def generate_ai_posts_task(user_id: int):
                 if duplicate:
                     logger.info("Duplicate skipped: %s", post_data.get('trigger_name'))
                     continue
+
                 template = execute_query("""
                     INSERT INTO post_templates
                         (user_id, content_text, media_url, platforms,
@@ -678,7 +705,7 @@ def generate_ai_posts_task(user_id: int):
                 """, (
                     user_id,
                     post_data["content_text"],
-                    post_data.get("media_url"),    
+                    post_data.get("media_url"),
                     post_data["platforms"],
                     post_data["scheduled_at"]
                 ), fetch="one")
@@ -690,7 +717,7 @@ def generate_ai_posts_task(user_id: int):
                 post = execute_query("""
                     INSERT INTO scheduled_posts
                         (template_id, scheduled_at, status, ai_generated, trigger_type, trigger_name)
-                    VALUES (%s, %s, 'awaiting_hr_approval', TRUE, %s, %s)   -- ← change here
+                    VALUES (%s, %s, 'scheduled', TRUE, %s, %s)
                     RETURNING id
                 """, (
                     template_id,
@@ -702,38 +729,22 @@ def generate_ai_posts_task(user_id: int):
                 if not post:
                     continue
 
-                post_id = post["id"]
-                create_approval_stage(post_id)
-                raw_token   = generate_confirmation_token()
-                hashed      = hash_token(raw_token)
-                save_confirmation_token(post_id, hashed)
-                approve_url = f"{BASE_URL}/approvals/{post_id}/hr-approve?token={raw_token}"
-                reject_url  = f"{BASE_URL}/approvals/{post_id}/hr-reject?token={raw_token}"
-                scheduled_str = post_data["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")
-                send_confirmation_email(
-                    to_email     = user["email"],
-                    post_content = post_data["content_text"],
-                    platforms    = post_data["platforms"],
-                    scheduled_at = scheduled_str,
-                    approve_url  = approve_url,
-                    reject_url   = reject_url
-                )
+                created_count += 1
                 logger.info(
                     "AI post created (id: %s) | %s: %s | platforms: %s",
-                    post_id,
+                    post["id"],
                     post_data["trigger_type"],
                     post_data["trigger_name"],
                     post_data["platforms"]
                 )
-            except Exception as e:
+            except Exception:
                 logger.exception("Failed to save AI post for user %s", user_id)
                 continue
 
-        logger.info("AI generation done for user %s — %s posts queued", user_id, len(posts))
+        logger.info("AI generation done for user %s — %s posts queued", user_id, created_count)
 
-    except Exception as e:
+    except Exception:
         logger.exception("generate_ai_posts_task failed for user %s", user_id)
-
 
 @celery_app.task(name="tasks.generate_ai_posts_for_all_users")
 def generate_ai_posts_for_all_users():
@@ -759,5 +770,5 @@ def _is_video_url(url: str) -> bool:
     if not url:
         return False
     video_extensions = ('.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v')
-    url_lower = url.lower().split('?')[0]  # strip query params
+    url_lower = url.lower().split('?')[0] 
     return any(url_lower.endswith(ext) for ext in video_extensions)

@@ -187,6 +187,38 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .badge-ai { background: var(--ai-bg); color: var(--ai-text); }
 .badge-gray { background: #f1f1ef; color: #6b6b6b; }
 
+/* ── SUPERADMIN OVERVIEW ── */
+.sa-banner { background: linear-gradient(135deg, #6d5bf5 0%, #4338ca 100%); border-radius: var(--radius-lg); padding: 1.75rem 2rem; color: #fff; margin-bottom: 1.5rem; display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; }
+.sa-banner h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+.sa-banner p { font-size: 13px; color: rgba(255,255,255,0.85); }
+.sa-banner-stats { display: flex; gap: 2rem; }
+.sa-banner-stats div { text-align: center; }
+.sa-banner-stats .n { font-size: 22px; font-weight: 700; }
+.sa-banner-stats .l { font-size: 11px; color: rgba(255,255,255,0.75); margin-top: 2px; }
+.metrics-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 1.5rem; }
+.metric-card .mc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.metric-card .mc-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.mc-blue .mc-icon { background: var(--info-bg); }
+.mc-green .mc-icon { background: var(--success-bg); }
+.mc-orange .mc-icon { background: var(--warning-bg); }
+.mc-purple .mc-icon { background: var(--ai-bg); }
+.metric-card .mc-value { font-size: 24px; font-weight: 700; }
+.metric-card .mc-label { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.org-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.org-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.1rem 1.25rem; cursor: pointer; transition: border-color 0.15s, transform 0.1s; }
+.org-card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
+.org-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--ai-bg); color: var(--ai-text); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.org-stat-row { display: flex; gap: 14px; margin-top: 10px; }
+.org-stat-row .s-num { font-size: 15px; font-weight: 700; }
+.org-stat-row .s-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.detail-header-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem 1.5rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.detail-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 1rem; }
+.activity-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 4px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.activity-row:last-child { border-bottom: none; }
+.back-link { font-size: 13px; color: var(--text-muted); cursor: pointer; display: inline-flex; align-items: center; gap: 4px; margin-bottom: 1rem; }
+.back-link:hover { color: var(--text); }
+@media (max-width: 900px) { .metrics-grid { grid-template-columns: repeat(2, 1fr); } .detail-stat-grid { grid-template-columns: 1fr; } }
+
 /* ── PLATFORM STATUS ── */
 .plat-status-row { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .plat-status-row:last-child { border-bottom: none; }
@@ -971,7 +1003,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 <div class="modal-overlay" id="repost-modal">
   <div class="modal-box">
     <h3>↺ Repost</h3>
-    <p>Edit content or platforms, then pick a new schedule. Goes through HR → SuperAdmin approval.</p>
+    <p>Edit content or platforms, then pick a new schedule. Goes through HR → Admin approval.</p>
     <div class="form-group">
       <label>Content</label>
       <textarea class="compose-textarea" id="repost-text" style="height:80px;"></textarea>
@@ -1015,6 +1047,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       </div>
       <div class="tabs">
         <button class="tab active" id="admin-tab-users" onclick="adminTab('users')">Users</button>
+        <button class="tab" id="admin-tab-pending" onclick="adminTab('pending')">Pending Approval</button>
         <button class="tab" id="admin-tab-posts" onclick="adminTab('posts')">Posts</button>
       </div>
     </div>
@@ -1039,6 +1072,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <div id="admin-users-list"><div class="empty-state">Loading...</div></div>
       </div>
     </div>
+    
+    <div id="admin-panel-pending" style="display:none;">
+      <div class="card">
+        <div class="card-title">🔍 Posts awaiting your approval <span class="count-badge" id="admin-pending-count">0</span></div>
+        <div id="admin-pending-list"><div class="empty-state">No posts pending your review.</div></div>
+      </div>
+    </div>
+
 
     <div id="admin-panel-posts" style="display:none;">
       <div class="card">
@@ -1067,17 +1108,57 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <p>Full oversight of all users and posts.</p>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="tab active" id="sa-tab-pending" onclick="saTab('pending')">Pending Review</button>
+        <button class="tab" id="sa-tab-overview" onclick="saTab('overview')">Overview</button>
         <button class="tab" id="sa-tab-all" onclick="saTab('all')">All Posts</button>
         <button class="tab" id="sa-tab-users" onclick="saTab('users')">Users</button>
       </div>
     </div>
 
-    <!-- Pending -->
-    <div id="sa-panel-pending">
-      <div class="card">
-        <div class="card-title">🔍 Posts awaiting your approval <span class="count-badge" id="sa-pending-count">0</span></div>
-        <div id="sa-pending-list"><div class="empty-state">No posts pending your review.</div></div>
+    <!-- Overview -->
+    <div id="sa-panel-overview" style="display:none;">
+      <div class="sa-banner">
+        <div>
+          <h2>Welcome back, SuperAdmin 👋</h2>
+          <p>Full oversight of every organization on SocialDesk</p>
+        </div>
+        <div class="sa-banner-stats">
+          <div><div class="n" id="sa-ov-orgs">—</div><div class="l">Organizations</div></div>
+          <div><div class="n" id="sa-ov-users">—</div><div class="l">Total Users</div></div>
+          <div><div class="n" id="sa-ov-posts">—</div><div class="l">Total Posts</div></div>
+        </div>
+      </div>
+
+      <div class="metrics-grid">
+        <div class="metric-card mc-purple">
+          <div class="mc-top"><div class="mc-icon">🏢</div></div>
+          <div class="mc-value" id="sa-mc-orgs">—</div>
+          <div class="mc-label">Organizations</div>
+        </div>
+        <div class="metric-card mc-blue">
+          <div class="mc-top"><div class="mc-icon">👥</div></div>
+          <div class="mc-value" id="sa-mc-users">—</div>
+          <div class="mc-label">Total users</div>
+        </div>
+        <div class="metric-card mc-green">
+          <div class="mc-top"><div class="mc-icon">📝</div></div>
+          <div class="mc-value" id="sa-mc-posts">—</div>
+          <div class="mc-label">Total posts</div>
+        </div>
+        <div class="metric-card mc-orange">
+          <div class="mc-top"><div class="mc-icon">🔗</div></div>
+          <div class="mc-value" id="sa-mc-social">—</div>
+          <div class="mc-label">Connected accounts</div>
+        </div>
+      </div>
+
+      <div id="sa-org-list-wrap">
+        <div class="card-title" style="margin-bottom:0.75rem;">🏢 Organizations</div>
+        <div class="org-grid" id="sa-org-grid"><div class="empty-state">Loading...</div></div>
+      </div>
+
+      <div id="sa-org-detail-wrap" style="display:none;">
+        <div class="back-link" onclick="closeOrgDetail()">← Back to organizations</div>
+        <div id="sa-org-detail-content"></div>
       </div>
     </div>
 
@@ -1087,7 +1168,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         <div class="card-title">📋 All posts across all users</div>
         <div class="tabs" style="margin-bottom:1rem;">
           <button class="tab active" onclick="loadSAAllPosts(null,this)">All</button>
-          <button class="tab" onclick="loadSAAllPosts('awaiting_superadmin_approval',this)">Awaiting SA</button>
+          <button class="tab" onclick="loadSAAllPosts('awaiting_admin_approval',this)">Awaiting Admin</button>
           <button class="tab" onclick="loadSAAllPosts('awaiting_hr_approval',this)">Awaiting HR</button>
           <button class="tab" onclick="loadSAAllPosts('posted',this)">Posted</button>
           <button class="tab" onclick="loadSAAllPosts('cancelled',this)">Cancelled</button>
@@ -1099,7 +1180,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
     <!-- Users -->
     <div id="sa-panel-users" style="display:none;">
       <div class="card">
-        <div class="card-title">�️ Create admin account</div>
+        <div class="card-title">🏢 Create admin account</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:end;flex-wrap:wrap;margin-bottom:10px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Organization name</label>
+            <input type="text" id="sa-admin-orgname" placeholder="e.g. Shilshatech">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label>Address (optional)</label>
+            <input type="text" id="sa-admin-address" placeholder="City, state">
+          </div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;flex-wrap:wrap;">
           <div class="form-group" style="margin-bottom:0;">
             <label>Email</label>
@@ -1117,7 +1208,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
         </div>
       </div>
       <div class="card">
-        <div class="card-title">�👥 All users</div>
+        <div class="card-title">👥 All users</div>
         <div id="sa-users-list"><div class="empty-state">Loading...</div></div>
       </div>
     </div>
@@ -1515,7 +1606,7 @@ function renderAll() {
 function updateMetrics() {
   document.getElementById('m-scheduled').textContent = state.posts.filter(p=>p.status==='scheduled').length;
   document.getElementById('m-published').textContent = state.posts.filter(p=>p.status==='posted').length;
-  document.getElementById('m-pending').textContent = state.posts.filter(p=>['awaiting_hr_approval','awaiting_superadmin_approval'].includes(p.status)).length;
+  document.getElementById('m-pending').textContent = state.posts.filter(p=>['awaiting_hr_approval','awaiting_admin_approval'].includes(p.status)).length;
 }
 
 // ═══ AI GENERATION ═══
@@ -1608,12 +1699,22 @@ function renderApprovals() {
       <div class="approval-meta">
         <span>🕐 ${fmtDate(p.scheduledAt)}</span>·
         <div class="post-plats">${renderPlatChips(p.platforms)}</div>
+        ${p.reposted_from_id ? '<span class="badge badge-info">↺ Repost</span>' : ''}
       </div>
-      <div class="approval-btns">
-        <button class="btn-approve" onclick="approvePost(${p.id})">✓ Approve & publish</button>
-        <button class="btn-edit-sm" onclick="editPost(${p.id})">Edit</button>
-        <button class="btn-reject-sm" onclick="openRejectModal(${p.id})">✕ Cancel</button>
-      </div>
+      ${p.reposted_from_id ? `
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:11px;">
+          📧 Reposts can only be approved via the confirmation link emailed to you — this prevents accidental re-publishing.
+        </div>
+        <div class="approval-btns">
+          <button class="btn-reject-sm" onclick="openRejectModal(${p.id})">✕ Cancel</button>
+        </div>
+      ` : `
+        <div class="approval-btns">
+          <button class="btn-approve" onclick="approvePost(${p.id})">✓ Approve & publish</button>
+          <button class="btn-edit-sm" onclick="editPost(${p.id})">Edit</button>
+          <button class="btn-reject-sm" onclick="openRejectModal(${p.id})">✕ Cancel</button>
+        </div>
+      `}
     </div>`).join('');
 }
 
@@ -1711,6 +1812,7 @@ async function loadPostsFromBackend() {
       ai_generated: p.ai_generated||false,
       trigger_type: p.trigger_type||null,
       trigger_name: p.trigger_name||null,
+      reposted_from_id: p.reposted_from_id || null,
       media_url    : p.media_url || null
     }));
     saveState(); renderAll();
@@ -1809,9 +1911,12 @@ function statusBadge(s){
     scheduled:['badge-info','Scheduled'],
     awaiting_approval:['badge-warning','Awaiting HR'],
     awaiting_hr_approval:['badge-warning','Awaiting HR'],
-    awaiting_superadmin_approval:['badge-ai','Awaiting SA'],
+    awaiting_admin_approval:['badge-ai','Awaiting Admin'],   
+    approved:['badge-ai','Approved'],
+    posting:['badge-info','Publishing…'],
     posted:['badge-success','Published'],
     failed:['badge-danger','Failed'],
+    expired:['badge-gray','Expired'],
     cancelled:['badge-gray','Cancelled'],
     skipped:['badge-gray','Skipped']
 };
@@ -1999,7 +2104,7 @@ async function confirmRepost() {
             start_date      : new Date(dt).toISOString()
         });
         closeRepostModal();
-        toast('↺ Repost scheduled ✅ Goes through HR → SuperAdmin approval');
+        toast('↺ Repost scheduled ✅ Goes through HR → Admin approval');
         await loadPostsFromBackend();
     } catch(e) { toast('Error: ' + e.message); }
 }
@@ -2013,11 +2118,61 @@ function goAdminDashboard() {
 }
 
 function adminTab(tab) {
-    ['users','posts'].forEach(t => {
+    ['users','posts','pending'].forEach(t => {
         document.getElementById(`admin-panel-${t}`).style.display = t === tab ? 'block' : 'none';
         document.getElementById(`admin-tab-${t}`)?.classList.toggle('active', t === tab);
     });
     if (tab === 'posts') renderAdminPosts();
+    if (tab === 'pending') loadAdminPending();
+}
+
+async function loadAdminPending() {
+    try {
+        const data = await apiGet('/admin/pending');
+        const posts = data.pending || [];
+        document.getElementById('admin-pending-count').textContent = posts.length;
+        if (!posts.length) {
+            document.getElementById('admin-pending-list').innerHTML = '<div class="empty-state">No posts pending your review.</div>';
+            return;
+        }
+        document.getElementById('admin-pending-list').innerHTML = posts.map(p => `
+            <div class="approval-card" style="border-color:${p.hr_status==='rejected'?'rgba(153,27,27,0.3)':'rgba(47,107,16,0.3)'};">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <span class="badge ${p.hr_status==='approved'?'badge-success':'badge-danger'}">
+                        HR: ${p.hr_status === 'approved' ? '✅ Approved' : '❌ Rejected'}
+                    </span>
+                    <span style="font-size:11px;color:var(--text-muted);">by ${esc(p.user_email)}</span>
+                    ${p.brand_name ? `<span class="badge badge-gray">${esc(p.brand_name)}</span>` : ''}
+                </div>
+                ${p.hr_rejection_reason ? `<div style="font-size:12px;color:var(--danger-text);margin-bottom:6px;">HR reason: ${esc(p.hr_rejection_reason)}</div>` : ''}
+                <div class="approval-content">"${esc((p.content_text||'').substring(0,120))}..."</div>
+                <div class="approval-meta">
+                    <span>🕐 ${fmtDate(p.scheduled_at)}</span>·
+                    <div class="post-plats">${renderPlatChips(p.platforms)}</div>
+                </div>
+                <div class="approval-btns">
+                    <button class="btn-approve" onclick="adminApprove(${p.id})">✅ Approve & Publish</button>
+                    <button class="btn-reject-sm" onclick="adminReject(${p.id})">❌ Reject</button>
+                </div>
+            </div>`).join('');
+    } catch(e) { toast('Error loading pending: ' + e.message); }
+}
+
+async function adminApprove(postId) {
+    try {
+        await apiPost(`/admin/posts/${postId}/approve`, {});
+        toast('✅ Post approved and queued for publishing!');
+        loadAdminPending();
+    } catch(e) { toast('Error: ' + e.message); }
+}
+
+async function adminReject(postId) {
+    const reason = prompt('Rejection reason (optional):');
+    try {
+        await apiPost(`/admin/posts/${postId}/reject`, { token: '', reason: reason || '' });
+        toast('❌ Post rejected.');
+        loadAdminPending();
+    } catch(e) { toast('Error: ' + e.message); }
 }
 
 async function createManagedUser() {
@@ -2093,26 +2248,26 @@ function renderAdminPosts() {
 
 function goSuperAdminDashboard() {
     showScreen('screen-superadmin');
-    saTab('pending');
+    saTab('overview');
 }
 
 function saTab(tab) {
-    ['pending','all','users'].forEach(t => {
+    ['overview','all','users'].forEach(t => {
         document.getElementById(`sa-panel-${t}`).style.display = t === tab ? 'block' : 'none';
         document.getElementById(`sa-tab-${t}`)?.classList.toggle('active', t === tab);
     });
-    if (tab === 'pending') loadSAPending();
+    if (tab === 'overview') loadSAOverview();
     if (tab === 'all')     loadSAAllPosts(null);
     if (tab === 'users')   loadSAUsers();
 }
 
 async function loadSAPending() {
     try {
-        const data = await apiGet('/superadmin/pending');
+        const data = await apiGet('/admin/pending');
         const posts = data.pending || [];
         document.getElementById('sa-pending-count').textContent = posts.length;
         if (!posts.length) {
-            document.getElementById('sa-pending-list').innerHTML = '<div class="empty-state">No posts pending your review 🎉</div>';
+            document.getElementById('sa-pending-list').innerHTML = '<div class="empty-state">No posts awaiting admin approval right now.</div>';
             return;
         }
         document.getElementById('sa-pending-list').innerHTML = posts.map(p => `
@@ -2129,10 +2284,7 @@ async function loadSAPending() {
                 <div class="approval-meta">
                     <span>🕐 ${fmtDate(p.scheduled_at)}</span>·
                     <div class="post-plats">${renderPlatChips(p.platforms)}</div>
-                </div>
-                <div class="approval-btns">
-                    <button class="btn-approve" onclick="saApprove(${p.id})">✅ Approve & Publish</button>
-                    <button class="btn-reject-sm" onclick="saReject(${p.id})">❌ Reject</button>
+                    <span class="badge badge-gray" style="font-size:10px;">Awaiting admin decision</span>
                 </div>
             </div>`).join('');
     } catch(e) { toast('Error loading pending: ' + e.message); }
@@ -2167,15 +2319,19 @@ async function loadSAAllPosts(status, btn) {
 }
 
 async function createAdminAccount() {
+    const orgName = document.getElementById('sa-admin-orgname').value.trim();
+    const address = document.getElementById('sa-admin-address').value.trim();
     const email = document.getElementById('sa-admin-email').value.trim();
     const password = document.getElementById('sa-admin-password').value;
     const inviteCode = document.getElementById('sa-admin-invite').value.trim();
-    if (!email || !password) {
-        toast('Please fill in email and password');
+    if (!orgName || !email || !password) {
+        toast('Please fill in organization name, email, and password');
         return;
     }
     try {
-        await apiPost('/superadmin/admins', { email, password, invite_code: inviteCode || null });
+        await apiPost('/superadmin/admins', { email, password, invite_code: inviteCode || null, org_name: orgName, address: address || null });
+        document.getElementById('sa-admin-orgname').value = '';
+        document.getElementById('sa-admin-address').value = '';
         document.getElementById('sa-admin-email').value = '';
         document.getElementById('sa-admin-password').value = '';
         document.getElementById('sa-admin-invite').value = '';
@@ -2184,6 +2340,118 @@ async function createAdminAccount() {
     } catch(e) {
         toast('Error: ' + e.message);
     }
+}
+
+function renderSocialBadges(socialAccounts) {
+    const entries = Object.entries(socialAccounts || {});
+    if (!entries.length) return '<span style="font-size:11px;color:var(--text-faint);">No connected accounts</span>';
+    return entries.map(([platform, count]) => {
+        const cls = platform === 'facebook' ? 'fb' : platform === 'instagram' ? 'ig' : 'li';
+        const label = platform === 'facebook' ? 'FB' : platform === 'instagram' ? 'IG' : platform === 'linkedin' ? 'LI' : platform.slice(0,2).toUpperCase();
+        return `<span class="plat-chip ${cls}">${label} ${count}</span>`;
+    }).join(' ');
+}
+
+function orgInitials(name) {
+    return (name || '?').trim().split(/\s+/).slice(0,2).map(w => w[0]).join('').toUpperCase();
+}
+
+async function loadSAOverview() {
+    document.getElementById('sa-org-detail-wrap').style.display = 'none';
+    document.getElementById('sa-org-list-wrap').style.display = 'block';
+    try {
+        const data = await apiGet('/superadmin/organizations');
+        const orgs = data.organizations || [];
+        const totalUsers = orgs.reduce((sum, o) => sum + (o.user_count || 0), 0);
+        const totalPosts = orgs.reduce((sum, o) => sum + (o.total_posts || 0), 0);
+        const totalSocial = Object.values(data.social_totals || {}).reduce((sum, n) => sum + n, 0);
+
+        document.getElementById('sa-ov-orgs').textContent = orgs.length;
+        document.getElementById('sa-ov-users').textContent = totalUsers;
+        document.getElementById('sa-ov-posts').textContent = totalPosts;
+        document.getElementById('sa-mc-orgs').textContent = orgs.length;
+        document.getElementById('sa-mc-users').textContent = totalUsers;
+        document.getElementById('sa-mc-posts').textContent = totalPosts;
+        document.getElementById('sa-mc-social').textContent = totalSocial;
+
+        if (!orgs.length) {
+            document.getElementById('sa-org-grid').innerHTML = '<div class="empty-state">No organizations yet. Create an admin account to add one.</div>';
+            return;
+        }
+        document.getElementById('sa-org-grid').innerHTML = orgs.map(o => `
+            <div class="org-card" onclick="openOrgDetail(${o.id})">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div class="org-avatar">${esc(orgInitials(o.org_name))}</div>
+                    <div style="min-width:0;">
+                        <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(o.org_name)}</div>
+                        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(o.email)}</div>
+                    </div>
+                </div>
+                <div class="org-stat-row">
+                    <div><div class="s-num">${o.user_count}</div><div class="s-lbl">Users</div></div>
+                    <div><div class="s-num">${o.total_posts}</div><div class="s-lbl">Posts</div></div>
+                </div>
+                <div style="margin-top:10px;">${renderSocialBadges(o.social_accounts)}</div>
+            </div>`).join('');
+    } catch(e) { toast('Error loading organizations: ' + e.message); }
+}
+
+async function openOrgDetail(adminId) {
+    document.getElementById('sa-org-list-wrap').style.display = 'none';
+    document.getElementById('sa-org-detail-wrap').style.display = 'block';
+    document.getElementById('sa-org-detail-content').innerHTML = '<div class="empty-state">Loading...</div>';
+    try {
+        const d = await apiGet(`/superadmin/organizations/${adminId}`);
+        const a = d.admin;
+        const activity = d.recent_activity || [];
+        document.getElementById('sa-org-detail-content').innerHTML = `
+            <div class="detail-header-card">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div class="org-avatar" style="width:46px;height:46px;font-size:16px;">${esc(orgInitials(a.org_name))}</div>
+                    <div>
+                        <div style="font-weight:700;font-size:17px;">${esc(a.org_name)}</div>
+                        <div style="font-size:12px;color:var(--text-muted);">Admin: ${esc(a.email)}${a.address ? ' · ' + esc(a.address) : ''}</div>
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:20px;font-weight:700;">${d.total_posts}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">Total posts</div>
+                </div>
+            </div>
+            <div class="detail-stat-grid">
+                <div class="metric-card mc-blue">
+                    <div class="mc-top"><div class="mc-icon">👥</div></div>
+                    <div class="mc-value">${d.user_count}</div>
+                    <div class="mc-label">Users</div>
+                </div>
+                <div class="metric-card mc-green">
+                    <div class="mc-top"><div class="mc-icon">📝</div></div>
+                    <div class="mc-value">${d.total_posts}</div>
+                    <div class="mc-label">Posts</div>
+                </div>
+                <div class="metric-card mc-orange">
+                    <div class="mc-top"><div class="mc-icon">🔗</div></div>
+                    <div class="mc-value">${Object.values(d.social_accounts || {}).reduce((s,n)=>s+n,0)}</div>
+                    <div class="mc-label">Social accounts</div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">🕐 Recent activity</div>
+                ${activity.length ? activity.map(item => `
+                    <div class="activity-row">
+                        <div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${statusBadge(item.status)}
+                            <span style="margin-left:6px;">${esc(item.user_email)} — "${esc((item.content_text||'').substring(0,60))}${(item.content_text||'').length>60?'...':''}"</span>
+                        </div>
+                        <span style="color:var(--text-muted);white-space:nowrap;margin-left:10px;">${fmtShort(item.approved_at || item.created_at)}</span>
+                    </div>`).join('') : '<div class="empty-state">No activity yet.</div>'}
+            </div>`;
+    } catch(e) { toast('Error loading organization: ' + e.message); }
+}
+
+function closeOrgDetail() {
+    document.getElementById('sa-org-detail-wrap').style.display = 'none';
+    document.getElementById('sa-org-list-wrap').style.display = 'block';
 }
 
 async function loadSAUsers() {
@@ -2220,23 +2488,6 @@ async function loadSAUsers() {
                 </tbody>
             </table>`;
     } catch(e) { toast('Error loading users: ' + e.message); }
-}
-
-async function saApprove(postId) {
-    try {
-        await apiPost(`/superadmin/posts/${postId}/approve`, {});
-        toast('✅ Post approved and queued for publishing!');
-        loadSAPending();
-    } catch(e) { toast('Error: ' + e.message); }
-}
-
-async function saReject(postId) {
-    const reason = prompt('Rejection reason (optional):');
-    try {
-        await apiPost(`/superadmin/posts/${postId}/reject`, { token: '', reason: reason || '' });
-        toast('❌ Post rejected.');
-        loadSAPending();
-    } catch(e) { toast('Error: ' + e.message); }
 }
 
 

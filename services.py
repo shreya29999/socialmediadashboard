@@ -165,14 +165,14 @@ def send_expired_email(
     )
 
 
-def send_superadmin_approval_email(
+def send_admin_approval_email(
     to_email: str,
     post_content: str,
     platforms: list,
     scheduled_at: str,
     approve_url: str,
     reject_url: str,
-    hr_status: str,          
+    hr_status: str,
     hr_reason: str = None,
     user_email: str = "",
     brand_name: str = ""
@@ -191,7 +191,7 @@ def send_superadmin_approval_email(
     )
     html_body = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto;">
-        <h2 style="color: #2c3e50;">🔍 SuperAdmin Review Required</h2>
+        <h2 style="color: #2c3e50;">🔍 Admin Review Required</h2>
         <p>A post from <strong>{user_email}</strong>{f' ({brand_name})' if brand_name else ''} needs your final approval.</p>
         {hr_decision_html}
         <div style="background: #f4f4f4; padding: 15px; border-radius: 8px; margin: 20px 0;">
@@ -199,7 +199,7 @@ def send_superadmin_approval_email(
             <p><strong>📱 Platforms:</strong> {platforms_text}</p>
             <p><strong>🕐 Scheduled:</strong> {scheduled_at}</p>
         </div>
-        <p>As SuperAdmin, your decision is final regardless of HR's action:</p>
+        <p>As Admin, your decision is final regardless of HR's action:</p>
         <div style="margin: 30px 0;">
             <a href="{approve_url}"
                style="background: #27ae60; color: white; padding: 12px 24px;
@@ -216,10 +216,9 @@ def send_superadmin_approval_email(
     """
     return send_email(
         to_email=to_email,
-        subject=f"🔍 SuperAdmin Review: Post for {scheduled_at}",
+        subject=f"🔍 Admin Review: Post for {scheduled_at}",
         html_body=html_body
     )
-
 
 def send_hr_decision_notify_email(
     to_email: str,
@@ -228,10 +227,10 @@ def send_hr_decision_notify_email(
     reason: str = None
 ):
     if hr_status == "approved":
-        msg = "HR has <strong>approved</strong> your post ✅ It's now with SuperAdmin for final review."
+        msg = "HR has <strong>approved</strong> your post ✅ It's now with your Admin for final review."
         color = "#27ae60"
     else:
-        msg = f"HR has <strong>rejected</strong> your post ❌{f' Reason: {reason}' if reason else ''} It has been escalated to SuperAdmin for final review."
+        msg = f"HR has <strong>rejected</strong> your post ❌{f' Reason: {reason}' if reason else ''} It has been escalated to your Admin for final review."
         color = "#e74c3c"
 
     html_body = f"""
@@ -241,7 +240,7 @@ def send_hr_decision_notify_email(
         <div style="background: #f4f4f4; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p><strong>📝 Content:</strong> {post_content}</p>
         </div>
-        <p style="color: #666; font-size: 13px;">You'll receive another notification once SuperAdmin makes the final decision.</p>
+        <p style="color: #666; font-size: 13px;">You'll receive another notification once your Admin makes the final decision.</p>
     </div>
     """
     return send_email(
