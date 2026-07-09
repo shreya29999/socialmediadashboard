@@ -729,7 +729,6 @@ def update_hr_approval(post_id: int, status: str, reason: str = None):
         WHERE scheduled_post_id = %s
     """, (status, status, reason, post_id))
 
-
 def update_admin_approval(post_id: int, status: str, reason: str = None):
     return execute_query("""
         UPDATE post_approval_stages

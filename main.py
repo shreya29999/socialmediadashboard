@@ -1198,7 +1198,6 @@ def repost(post_id: int, req: CreatePostRequest, current_user: dict = Depends(ge
     user_id = current_user["user_id"]
     start   = datetime.fromisoformat(req.start_date.replace('Z', '+00:00'))
     end     = datetime.fromisoformat(req.end_date.replace('Z', '+00:00')) if req.end_date else None
-
     template = create_post_template(
         user_id         = user_id,
         content_text    = req.content_text,

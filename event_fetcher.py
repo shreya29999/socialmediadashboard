@@ -85,7 +85,6 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
     except Exception as e:
         print(f"❌ Calendarific fetch failed: {e}")
         return []
-
     return execute_query("""
         SELECT * FROM events_cache
         WHERE country_code = %s
