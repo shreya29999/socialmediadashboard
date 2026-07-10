@@ -401,6 +401,7 @@ def _get_rag_documents(user_id: int) -> list:
 
     return docs
 
+
 def retrieve_rag_documents(user_id: int, query: str, limit: int = 4) -> list:
     docs = _get_rag_documents(user_id)
     query_tokens = _get_query_tokens(query)
@@ -509,7 +510,6 @@ Rules for the image_prompt:
 - No religious, political, or violent imagery
 - No text, words, logos, or watermarks in the image
 - Keep it to one or two sentences, concrete and visual (subject, setting, mood)
-
 Return ONLY valid JSON, no explanation, no markdown:
 {{
   "caption": "the complete ready-to-publish post text",
@@ -582,7 +582,7 @@ def upload_generated_image(image_bytes: bytes) -> str:
     try:
         result = cloudinary.uploader.upload(
             image_bytes,
-            folder         = "socialdesk/ai_generated",
+            folder = "socialdesk/ai_generated",
             resource_type  = "image",
             transformation = [
                 {"width": 1080, "height": 1080, "crop": "limit"},

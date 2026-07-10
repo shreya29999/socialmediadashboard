@@ -94,6 +94,8 @@ def create_schema():
                     UNIQUE(user_id, platform)
                 );
             """)
+            cur.execute("ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS account_name VARCHAR(255);")
+            cur.execute("ALTER TABLE social_accounts ADD COLUMN IF NOT EXISTS account_email VARCHAR(255);")
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS post_templates (
                     id                  SERIAL PRIMARY KEY,
@@ -328,7 +330,6 @@ def get_admins():
 
 
 def get_admins_overview():
-    """One row per organization (admin), with counts for the SuperAdmin org list + social summary panel."""
     return execute_query("""
         SELECT
             a.id, a.email, COALESCE(a.org_name, a.email) AS org_name, a.address, a.created_at,
@@ -370,13 +371,24 @@ def get_admin_overview_detail(admin_id: int):
         WHERE u.admin_id = %s
     """, (admin_id,), fetch="one")["count"]
 
-    social_accounts = execute_query("""
-        SELECT sac.platform, COUNT(*) AS count
+    social_accounts_rows = execute_query("""
+        SELECT sac.platform, sac.account_name, sac.account_email, u.email AS user_email
         FROM social_accounts sac
         JOIN users u ON sac.user_id = u.id
         WHERE u.admin_id = %s
-        GROUP BY sac.platform
+        ORDER BY sac.platform
     """, (admin_id,), fetch="all")
+    social_accounts_rows = social_accounts_rows or []
+    social_accounts = {}
+    for row in social_accounts_rows:
+        social_accounts[row["platform"]] = social_accounts.get(row["platform"], 0) + 1
+    social_accounts_detail = {}
+    for row in social_accounts_rows:
+        social_accounts_detail.setdefault(row["platform"], []).append({
+            "account_name": row["account_name"],
+            "account_email": row["account_email"],
+            "user_email": row["user_email"]
+        })
 
     recent_activity = execute_query("""
         SELECT sp.id AS post_id, sp.status, sp.created_at, sp.approved_at,
@@ -394,6 +406,7 @@ def get_admin_overview_detail(admin_id: int):
         "user_count": user_count,
         "total_posts": total_posts,
         "social_accounts": social_accounts,
+        "social_accounts_detail": social_accounts_detail,
         "recent_activity": recent_activity
     }
 
@@ -402,19 +415,22 @@ def get_admin_overview_detail(admin_id: int):
 # SECTION 4 — SOCIAL ACCOUNT QUERIES
 # ================================================================
 
-def save_social_account(user_id, platform, access_token, refresh_token=None, token_expires_at=None, page_id=None):
+def save_social_account(user_id, platform, access_token, refresh_token=None, token_expires_at=None,
+                         page_id=None, account_name=None, account_email=None):
     return execute_query("""
         INSERT INTO social_accounts
-            (user_id, platform, access_token, refresh_token, token_expires_at, page_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
+            (user_id, platform, access_token, refresh_token, token_expires_at, page_id, account_name, account_email)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (user_id, platform)
         DO UPDATE SET
             access_token = EXCLUDED.access_token,
             refresh_token = EXCLUDED.refresh_token,
             token_expires_at = EXCLUDED.token_expires_at,
-            page_id = EXCLUDED.page_id
+            page_id = EXCLUDED.page_id,
+            account_name = EXCLUDED.account_name,
+            account_email = EXCLUDED.account_email
         RETURNING id
-    """, (user_id, platform, access_token, refresh_token, token_expires_at, page_id), fetch="one")
+    """, (user_id, platform, access_token, refresh_token, token_expires_at, page_id, account_name, account_email), fetch="one")
 
 def get_social_account(user_id, platform):
     return execute_query(
@@ -728,6 +744,7 @@ def update_hr_approval(post_id: int, status: str, reason: str = None):
             hr_rejection_reason = %s
         WHERE scheduled_post_id = %s
     """, (status, status, reason, post_id))
+
 
 def update_admin_approval(post_id: int, status: str, reason: str = None):
     return execute_query("""

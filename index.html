@@ -1337,8 +1337,6 @@ async function doLogin() {
   finally { btn.disabled=false; document.getElementById('login-label').textContent='Sign in'; }
 }
 
-
-
 async function doRegister() {
   const name = document.getElementById('reg-name').value.trim();
   const email = document.getElementById('reg-email').value.trim();
@@ -2357,6 +2355,36 @@ function orgInitials(name) {
     return (name || '?').trim().split(/\s+/).slice(0,2).map(w => w[0]).join('').toUpperCase();
 }
 
+const PLATFORM_META = {
+    facebook:  { label: 'Facebook',  cls: 'fb' },
+    instagram: { label: 'Instagram', cls: 'ig' },
+    linkedin:  { label: 'LinkedIn',  cls: 'li' }
+};
+
+function renderSocialAccountsDetail(detail) {
+    const platforms = Object.keys(detail || {});
+    if (!platforms.length) {
+        return '<div class="empty-state">No social accounts connected yet.</div>';
+    }
+    return platforms.map(platform => {
+        const meta = PLATFORM_META[platform] || { label: platform, cls: 'gray' };
+        const accounts = detail[platform] || [];
+        const rows = accounts.map(acc => {
+            const name = acc.account_name ? esc(acc.account_name) : '<span style="color:var(--text-faint);">Name unavailable</span>';
+            const email = acc.account_email ? esc(acc.account_email) : (platform !== 'linkedin' ? '<span style="color:var(--text-faint);">Not provided by platform</span>' : '<span style="color:var(--text-faint);">Unavailable</span>');
+            return `
+                <div class="plat-status-row">
+                    <div class="plat-row-left">
+                        <span class="plat-chip ${meta.cls}">${meta.label}</span>
+                        <span>${name}</span>
+                    </div>
+                    <span style="font-size:12px;color:var(--text-muted);">${email} · connected by ${esc(acc.user_email)}</span>
+                </div>`;
+        }).join('');
+        return rows;
+    }).join('');
+}
+
 async function loadSAOverview() {
     document.getElementById('sa-org-detail-wrap').style.display = 'none';
     document.getElementById('sa-org-list-wrap').style.display = 'block';
@@ -2432,9 +2460,13 @@ async function openOrgDetail(adminId) {
                 </div>
                 <div class="metric-card mc-orange">
                     <div class="mc-top"><div class="mc-icon">🔗</div></div>
-                    <div class="mc-value">${Object.values(d.social_accounts || {}).reduce((s,n)=>s+n,0)}</div>
+                    <div class="mc-value">${Object.keys(d.social_accounts || {}).length}</div>
                     <div class="mc-label">Social accounts</div>
                 </div>
+            </div>
+            <div class="card">
+                <div class="card-title">🔗 Connected social accounts</div>
+                ${renderSocialAccountsDetail(d.social_accounts_detail)}
             </div>
             <div class="card">
                 <div class="card-title">🕐 Recent activity</div>

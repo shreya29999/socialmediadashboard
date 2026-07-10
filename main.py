@@ -289,7 +289,7 @@ def register(req: RegisterRequest):
         invite_code=req.invite_code,
         admin_email=req.admin_email,
         admins=admins,
-        domain_mapping={"shilsha.com": "admin@shilsha.com"},
+        domain_mapping={"shilsha.com":"admin@shilsha.com"},
     )
     admin_id = resolved_admin["id"] if resolved_admin else None
     user = create_user(email, hashed, admin_id=admin_id)
@@ -393,31 +393,43 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
         )
         pages      = pages_response.json().get("data", [])
         ig_account = None
+        ig_username = None
+        page_name  = None
         if pages:
             page       = pages[0]
             page_id    = page["id"]
+            page_name  = page.get("name")
             page_token = page.get("access_token", long_lived_token)
             ig_resp    = await client.get(
                 f"https://graph.facebook.com/v18.0/{page_id}",
                 params={"fields": "instagram_business_account", "access_token": page_token}
             )
             ig_account = ig_resp.json().get("instagram_business_account")
+            if ig_account:
+                ig_detail_resp = await client.get(
+                    f"https://graph.facebook.com/v18.0/{ig_account['id']}",
+                    params={"fields": "username", "access_token": page_token}
+                )
+                ig_username = ig_detail_resp.json().get("username")
         else:
             me_data    = (await client.get(
                 "https://graph.facebook.com/v18.0/me",
                 params={"access_token": long_lived_token, "fields": "id,name"}
             )).json()
             page_id    = me_data.get("id")
+            page_name  = me_data.get("name")
             page_token = long_lived_token
         save_social_account(
             user_id=user_id, platform="facebook",
             access_token=page_token, page_id=page_id,
-            token_expires_at=expires_at
+            token_expires_at=expires_at,
+            account_name=page_name
         )
         if ig_account:
             save_social_account(
                 user_id=user_id, platform="instagram",
-                access_token=page_token, page_id=ig_account["id"]
+                access_token=page_token, page_id=ig_account["id"],
+                account_name=ig_username
             )
         return {
             "message"  : "Facebook connected ✅",
@@ -469,7 +481,9 @@ async def linkedin_callback(code: str = Query(...), state: str = Query(...)):
             user_id=user_id, platform="linkedin",
             access_token=access_token,
             refresh_token=token_data.get("refresh_token"),
-            page_id=user_urn
+            page_id=user_urn,
+            account_name=profile.get("name"),
+            account_email=profile.get("email")
         )
     return {"message": "LinkedIn connected ✅","user_urn": user_urn}
 
@@ -549,7 +563,6 @@ async def platform_accounts(current_user: dict = Depends(get_current_user)):
     else:
         accounts["linkedin"] = {"connected": False}
     return accounts
-
 
 @app.post("/media/upload")
 async def upload_media(

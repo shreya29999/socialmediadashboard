@@ -220,6 +220,7 @@ def send_admin_approval_email(
         html_body=html_body
     )
 
+
 def send_hr_decision_notify_email(
     to_email: str,
     post_content: str,

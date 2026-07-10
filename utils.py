@@ -47,8 +47,6 @@ def verify_confirmation_token(raw_token: str, hashed_token: str) -> bool:
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def hash_password(plain_password: str) -> str:
     pw_bytes = plain_password.encode("utf-8")[:72]
     return pwd_context.hash(pw_bytes.decode("utf-8", errors="ignore"))
@@ -58,7 +56,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     pw_bytes = plain_password.encode("utf-8")[:72]
     return pwd_context.verify(pw_bytes.decode("utf-8", errors="ignore"), hashed_password)
 
-    
+
 def calculate_next_dates(
     recurrence_type : str,
     start_date      : datetime,
