@@ -26,7 +26,8 @@ from database import (
     save_admin_token,         
     get_approval_stage,
     update_last_login,
-    get_posts_ready_to_publish 
+    get_posts_ready_to_publish,
+    create_notification
 )
 from services import (
     send_confirmation_email,
@@ -45,8 +46,6 @@ from utils import (
 from logger import logger
 init_db()
 BASE_URL = os.getenv("BASE_URL")
-
-
 
 @celery_app.task(name="tasks.send_confirmation_task")
 def send_confirmation_task():
@@ -75,6 +74,14 @@ def send_confirmation_task():
                 approve_url  = approve_url,
                 reject_url   = reject_url
             )
+            create_notification(
+                user_id = post["user_id"],
+                type    = "hr_approval_requested",
+                title   = "Post awaiting your approval",
+                message = f"Your post scheduled for {scheduled_at} needs approval before it goes live.",
+                link    = f"/posts/{post['id']}",
+                post_id = post["id"]
+            )
             logger.info("HR confirmation sent for post %s", post["id"])
         except Exception:
             logger.exception("Failed to send confirmation for post %s", post["id"])
@@ -84,7 +91,6 @@ def _escalate_to_admin(post_id: int, hr_status: str, hr_reason: str = None):
         post = get_post_by_id(post_id)
         user = get_user_by_id(post["user_id"])
         if not user.get("admin_id"):
-            # No admin to escalate to — the HR decision is final.
             if hr_status == "approved":
                 approve_post(post_id)
                 publish_post_task.delay(post_id)
@@ -117,11 +123,31 @@ def _escalate_to_admin(post_id: int, hr_status: str, hr_reason: str = None):
             user_email   = user["email"],
             brand_name   = ""
         )
+        create_notification(
+            user_id = admin["id"],
+            type    = "admin_approval_requested",
+            title   = "Post awaiting your approval",
+            message = f"A post from {user['email']} needs your final review (HR: {hr_status}).",
+            link    = f"/admin/pending",
+            post_id = post_id
+        )
         send_hr_decision_notify_email(
             to_email     = user["email"],
             post_content = post["content_text"],
             hr_status    = hr_status,
             reason       = hr_reason
+        )
+        create_notification(
+            user_id = user["id"],
+            type    = "hr_decision",
+            title   = "HR reviewed your post" if hr_status == "approved" else "HR rejected your post",
+            message = (
+                "HR approved your post — it's now with your Admin for final review."
+                if hr_status == "approved"
+                else f"HR rejected your post{f': {hr_reason}' if hr_reason else ''}. It has been escalated to your Admin."
+            ),
+            link    = f"/posts/{post_id}",
+            post_id = post_id
         )
         logger.info("Post %s escalated to admin %s (HR: %s)", post_id, admin["id"], hr_status)
     except Exception:
@@ -146,11 +172,18 @@ def expiry_checker_task():
                 post_content = full_post["content_text"],
                 scheduled_at = scheduled_at
             )
+            create_notification(
+                user_id = full_post["user_id"],
+                type    = "post_expired",
+                title   = "Post expired without approval",
+                message = f"Your post scheduled for {scheduled_at} was not approved in time and has been cancelled.",
+                link    = f"/posts/{post['id']}",
+                post_id = post["id"]
+            )
             logger.warning("Post %s marked as expired", post["id"])
 
         except Exception as e:
             logger.exception("Failed to process expired post %s", post["id"])
-
 
 @celery_app.task(name="tasks.publish_due_posts_task")
 def publish_due_posts_task():
@@ -167,12 +200,14 @@ def publish_due_posts_task():
         except Exception:
             logger.exception("Failed to queue due post %s", post["id"])
 
+
 @celery_app.task(
     name="tasks.publish_post_task",
     bind=True,
     max_retries=3,
     default_retry_delay=60
 )
+
 def publish_post_task(self, post_id: int):
     logger.info("Publishing post %s...", post_id)
 
@@ -225,6 +260,14 @@ def publish_post_task(self, post_id: int):
                 platforms    = success_platforms,
                 published_at = published_at
             )
+            create_notification(
+                user_id = post["user_id"],
+                type    = "post_published",
+                title   = "Your post is live!",
+                message = f"Published on {', '.join(success_platforms)} at {published_at}.",
+                link    = f"/posts/{post_id}",
+                post_id = post_id
+            )
             logger.info("Post %s published successfully on: %s", post_id, success_platforms)
         elif success_platforms and failed_platforms:
             update_post_status(post_id, "posted")
@@ -234,6 +277,14 @@ def publish_post_task(self, post_id: int):
                 platforms    = success_platforms,
                 published_at = published_at
             )
+            create_notification(
+                user_id = post["user_id"],
+                type    = "post_published",
+                title   = "Your post is live (partially)",
+                message = f"Published on {', '.join(success_platforms)}, but failed on {', '.join(failed_platforms)}.",
+                link    = f"/posts/{post_id}",
+                post_id = post_id
+            )
             logger.warning("Post %s partially published. Success: %s, Failed: %s", post_id, success_platforms, failed_platforms)
         else:
             update_post_status(post_id, "failed")
@@ -242,6 +293,14 @@ def publish_post_task(self, post_id: int):
                 post_content     = post["content_text"],
                 failed_platforms = failed_platforms,
                 error            = "All platforms failed to publish"
+            )
+            create_notification(
+                user_id = post["user_id"],
+                type    = "post_failed",
+                title   = "Post publishing failed",
+                message = f"Failed to publish on {', '.join(failed_platforms)}. Please check your connected accounts.",
+                link    = f"/posts/{post_id}",
+                post_id = post_id
             )
             logger.error("Post %s failed on all platforms: %s", post_id, failed_platforms)
         _generate_next_occurrence(post)
@@ -360,9 +419,7 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                     "success": False,
                     "error": container.get("error", {}).get("message", "Container creation failed")
                 }
-
             creation_id = container["id"]
-
             if is_video:
                 logger.info("Instagram: waiting for video processing...")
                 for poll_attempt in range(15):   
@@ -378,7 +435,6 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
                     status_data = status_resp.json()
                     status_code = status_data.get("status_code")
                     logger.debug("Instagram video status: %s (poll %s/15)", status_code, poll_attempt + 1)
-
                     if status_code == "FINISHED":
                         break
                     elif status_code == "ERROR":
@@ -423,7 +479,6 @@ def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dic
         "Content-Type"              : "application/json",
         "X-Restli-Protocol-Version" : "2.0.0"
     }
-
     register_payload = {
         "registerUploadRequest": {
             "owner": owner,
@@ -437,7 +492,6 @@ def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dic
             "supportedUploadMechanism": ["SYNCHRONOUS_UPLOAD"]
         }
     }
-
     reg_response = httpx.post(
         "https://api.linkedin.com/v2/assets?action=registerUpload",
         json=register_payload,
@@ -455,19 +509,15 @@ def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dic
             "success": False,
             "error": reg_data.get("message", "LinkedIn asset registration failed")
         }
-
     image_response = httpx.get(image_url, timeout=30.0)
     if image_response.status_code != 200:
         return {"success": False, "error": "Failed to fetch image for LinkedIn upload"}
-
     content_type = image_response.headers.get("content-type", "image/jpeg")
     upload_headers = {"Content-Type": content_type}
-
     put_response = httpx.put(upload_url, content=image_response.content, headers=upload_headers, timeout=60.0)
     if put_response.status_code not in (200, 201, 202):
         logger.error("LinkedIn upload failed: %s %s", put_response.status_code, put_response.text)
         return {"success": False, "error": "LinkedIn image upload failed"}
-
     return {"success": True, "asset": asset}
 
 def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dict:
@@ -491,7 +541,6 @@ def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dic
             "supportedUploadMechanism": ["SYNCHRONOUS_UPLOAD"]
         }
     }
-
     reg_response = httpx.post(
         "https://api.linkedin.com/v2/assets?action=registerUpload",
         json=register_payload,
@@ -503,15 +552,12 @@ def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dic
     upload_url = reg_data.get("value", {}).get("uploadMechanism", {}).get(
         "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}
     ).get("uploadUrl")
-
     if not asset or not upload_url:
         logger.error("LinkedIn video registration failed: %s", reg_data)
         return {"success": False, "error": "LinkedIn video asset registration failed"}
-
     video_response = httpx.get(video_url, timeout=60.0)
     if video_response.status_code != 200:
         return {"success": False, "error": "Failed to fetch video for LinkedIn upload"}
-
     put_response = httpx.put(
         upload_url,
         content=video_response.content,
@@ -521,30 +567,25 @@ def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dic
     if put_response.status_code not in (200, 201, 202):
         logger.error("LinkedIn video upload failed: %s", put_response.status_code)
         return {"success": False, "error": "LinkedIn video upload failed"}
-
     return {"success": True, "asset": asset}
 
 def _publish_to_linkedin(post: dict, access_token: str) -> dict:
     import httpx
     from database import get_social_account
-
     account   = get_social_account(post["user_id"], "linkedin")
     user_urn  = account["page_id"]
     media_url = post.get("media_url")
     is_video  = _is_video_url(media_url)
-
     headers = {
         "Authorization"             : f"Bearer {access_token}",
         "Content-Type"              : "application/json",
         "X-Restli-Protocol-Version" : "2.0.0"
     }
-
     if media_url and is_video:
         logger.info("LinkedIn: uploading video...")
         upload_result = _upload_linkedin_video(media_url, access_token, user_urn)
         if not upload_result["success"]:
             return upload_result
-
         specific_content = {
             "com.linkedin.ugc.ShareContent": {
                 "shareCommentary"   : {"text": post["content_text"]},
@@ -559,13 +600,11 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
                 ]
             }
         }
-
     elif media_url:
         logger.info("LinkedIn: uploading image...")
         upload_result = _upload_linkedin_image(media_url, access_token, user_urn)
         if not upload_result["success"]:
             return upload_result
-
         specific_content = {
             "com.linkedin.ugc.ShareContent": {
                 "shareCommentary"   : {"text": post["content_text"]},
@@ -580,7 +619,6 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
                 ]
             }
         }
-
     else:
         logger.info("LinkedIn: posting text only...")
         specific_content = {
@@ -589,7 +627,6 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
                 "shareMediaCategory": "NONE"
             }
         }
-
     payload = {
         "author"         : user_urn,
         "lifecycleState" : "PUBLISHED",
@@ -598,7 +635,6 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
             "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
         }
     }
-
     try:
         response = httpx.post(
             "https://api.linkedin.com/v2/ugcPosts",
@@ -608,13 +644,11 @@ def _publish_to_linkedin(post: dict, access_token: str) -> dict:
         )
         if response.status_code == 201:
             return {"success": True, "post_id": response.headers.get("x-restli-id")}
-
         logger.error("LinkedIn ugcPosts failed: %s %s", response.status_code, response.text)
         return {
             "success": False,
             "error"  : response.json().get("message", "LinkedIn post failed")
         }
-
     except httpx.TimeoutException:
         return {"success": False, "error": "LinkedIn API timed out"}
     except Exception as e:
@@ -626,15 +660,12 @@ def _generate_next_occurrence(post: dict):
         template = get_template_by_id(post["template_id"])
         if not template:
             return
-
         if template["recurrence_type"] == "ONE_TIME":
             logger.info("One time post, no next occurrence")
             return
-
         if template["status"] != "active":
             logger.info("Template %s is %s, skipping", template["id"], template["status"])
             return
-
         next_date = calculate_single_next_date(
             recurrence_type  = template["recurrence_type"],
             last_date        = post["scheduled_at"],
@@ -643,7 +674,6 @@ def _generate_next_occurrence(post: dict):
             max_occurrences  = template["max_occurrences"],
             occurrence_count = template["occurrence_count"]
         )
-
         if not next_date:
             logger.info("Template %s has completed all occurrences", template["id"])
             from database import execute_query
@@ -652,11 +682,9 @@ def _generate_next_occurrence(post: dict):
                 (template["id"],)
             )
             return
-
         new_post = create_scheduled_post(template["id"], next_date)
         increment_occurrence_count(template["id"])
         logger.info("Next occurrence created: %s (post id: %s)", next_date, new_post["id"])
-
     except Exception as e:
         logger.exception("Failed to generate next occurrence")
 
@@ -669,14 +697,11 @@ def generate_ai_posts_task(user_id: int):
         if not posts:
             logger.warning("No posts generated for user %s", user_id)
             return
-
         user = get_user_by_id(user_id)
         if not user:
             logger.error("User %s not found", user_id)
             return
-
         created_count = 0
-
         for post_data in posts:
             try:
                 duplicate = execute_query("""
@@ -691,11 +716,9 @@ def generate_ai_posts_task(user_id: int):
                     )
                     LIMIT 1
                 """, (post_data.get("trigger_name"), user_id), fetch="one")
-
                 if duplicate:
                     logger.info("Duplicate skipped: %s", post_data.get('trigger_name'))
                     continue
-
                 template = execute_query("""
                     INSERT INTO post_templates
                         (user_id, content_text, media_url, platforms,
@@ -709,10 +732,8 @@ def generate_ai_posts_task(user_id: int):
                     post_data["platforms"],
                     post_data["scheduled_at"]
                 ), fetch="one")
-
                 if not template:
                     continue
-
                 template_id = template["id"]
                 post = execute_query("""
                     INSERT INTO scheduled_posts
@@ -725,10 +746,8 @@ def generate_ai_posts_task(user_id: int):
                     post_data.get("trigger_type"),
                     post_data.get("trigger_name")
                 ), fetch="one")
-
                 if not post:
                     continue
-
                 created_count += 1
                 logger.info(
                     "AI post created (id: %s) | %s: %s | platforms: %s",
@@ -740,11 +759,10 @@ def generate_ai_posts_task(user_id: int):
             except Exception:
                 logger.exception("Failed to save AI post for user %s", user_id)
                 continue
-
         logger.info("AI generation done for user %s — %s posts queued", user_id, created_count)
-
     except Exception:
         logger.exception("generate_ai_posts_task failed for user %s", user_id)
+
 
 @celery_app.task(name="tasks.generate_ai_posts_for_all_users")
 def generate_ai_posts_for_all_users():
@@ -756,15 +774,14 @@ def generate_ai_posts_for_all_users():
         AND tone IS NOT NULL
         AND country_code IS NOT NULL
     """, fetch="all")
-
     if not users:
         logger.warning("No users with completed profiles found")
         return
-
     logger.info("Triggering AI generation for %s users...", len(users))
     for user in users:
         generate_ai_posts_task.delay(user["user_id"])
         logger.info("Queued AI generation for user %s", user["user_id"])
+
 
 def _is_video_url(url: str) -> bool:
     if not url:

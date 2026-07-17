@@ -153,7 +153,7 @@ def send_expired_email(
             <p><strong>📝 Content:</strong> {post_content}</p>
             <p><strong>🕐 Was scheduled for:</strong> {scheduled_at}</p>
         </div>
-        <p>This post was not approved in time and has been cancelled.</p>
+        <p>This post was not approved in time and has been cancelled. </p>
         <p>You can reschedule it from your dashboard.</p>
     </div>
     """

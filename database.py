@@ -194,6 +194,10 @@ def create_schema():
             """)
             cur.execute("ALTER TABLE trends_cache ALTER COLUMN country_code TYPE VARCHAR(10);")
             cur.execute("""
+                ALTER TABLE trends_cache
+                ALTER COLUMN topic TYPE TEXT;
+            """)
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS rag_chat_history (
                     id         SERIAL PRIMARY KEY,
                     user_id    INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -243,7 +247,29 @@ def create_schema():
             CREATE INDEX IF NOT EXISTS idx_approval_stages_admin_status
             ON post_approval_stages(admin_status);
             """)
-            
+
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id          SERIAL PRIMARY KEY,
+                    user_id     INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    type        VARCHAR(50) NOT NULL,
+                    title       VARCHAR(255) NOT NULL,
+                    message     TEXT,
+                    link        TEXT,
+                    post_id     INTEGER REFERENCES scheduled_posts(id) ON DELETE SET NULL,
+                    is_read     BOOLEAN DEFAULT FALSE,
+                    created_at  TIMESTAMP DEFAULT NOW()
+                );
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_notifications_user_created
+                ON notifications(user_id, created_at DESC);
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
+                ON notifications(user_id) WHERE is_read = FALSE;
+            """)
+
         conn.commit()
         print("✅ All tables created")
     except Exception as e:
@@ -798,3 +824,58 @@ def admin_final_reject(post_id: int, reason: str = None):
             admin_token_used = TRUE
         WHERE id = %s
     """, (reason, post_id))
+
+# ================================================================
+# SECTION 10 — NOTIFICATIONS
+# ================================================================
+
+def create_notification(user_id: int, type: str, title: str, message: str = None, link: str = None, post_id: int = None):
+    if not user_id:
+        return None
+    return execute_query("""
+        INSERT INTO notifications (user_id, type, title, message, link, post_id)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING id, user_id, type, title, message, link, post_id, is_read, created_at
+    """, (user_id, type, title, message, link, post_id), fetch="one")
+
+
+def get_notifications(user_id: int, unread_only: bool = False, limit: int = 50):
+    where_clause = "AND is_read = FALSE" if unread_only else ""
+    return execute_query(f"""
+        SELECT * FROM notifications
+        WHERE user_id = %s
+        {where_clause}
+        ORDER BY created_at DESC
+        LIMIT %s
+    """, (user_id, limit), fetch="all")
+
+
+def get_unread_notification_count(user_id: int):
+    result = execute_query(
+        "SELECT COUNT(*) AS count FROM notifications WHERE user_id = %s AND is_read = FALSE",
+        (user_id,), fetch="one"
+    )
+    return result["count"] if result else 0
+
+
+def mark_notification_read(notification_id: int, user_id: int):
+    return execute_query("""
+        UPDATE notifications
+        SET is_read = TRUE
+        WHERE id = %s AND user_id = %s
+    """, (notification_id, user_id))
+
+
+def mark_all_notifications_read(user_id: int):
+    return execute_query("""
+        UPDATE notifications
+        SET is_read = TRUE
+        WHERE user_id = %s AND is_read = FALSE
+    """, (user_id,))
+
+
+def delete_notification(notification_id: int, user_id: int):
+    return execute_query(
+        "DELETE FROM notifications WHERE id = %s AND user_id = %s",
+        (notification_id, user_id)
+    )

@@ -193,7 +193,7 @@ def _add_one_month(dt: datetime) -> datetime:
     max_day = calendar.monthrange(year, month)[1]
     day     = min(dt.day, max_day)
 
-    return dt.replace(year=year, month=month, day=day)
+    return dt.replace(year=year,month=month,day=day)
 
 def refresh_facebook_token(current_token: str) -> Optional[dict]:
     try:

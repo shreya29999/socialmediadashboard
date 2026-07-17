@@ -52,7 +52,13 @@ from database import (
     save_admin_token,
     save_confirmation_token,
     get_admins_overview,
-    get_admin_overview_detail
+    get_admin_overview_detail,
+    create_notification,
+    get_notifications,
+    get_unread_notification_count,
+    mark_notification_read,
+    mark_all_notifications_read,
+    delete_notification
 )
 from utils import (
     create_access_token,
@@ -437,7 +443,6 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
             "instagram": ig_account["id"] if ig_account else "Not found"
         }
 
-
 @app.get("/auth/linkedin/connect")
 def linkedin_connect(current_user: dict = Depends(get_current_user)):
     user_id  = current_user["user_id"]
@@ -470,13 +475,11 @@ async def linkedin_callback(code: str = Query(...), state: str = Query(...)):
         access_token = token_data.get("access_token")
         if not access_token:
             raise HTTPException(status_code=400, detail=f"LinkedIn token error: {token_data}")
-
         profile = (await client.get(
             "https://api.linkedin.com/v2/userinfo",
             headers={"Authorization": f"Bearer {access_token}"}
         )).json()
         user_urn = f"urn:li:person:{profile.get('sub')}"
-
         save_social_account(
             user_id=user_id, platform="linkedin",
             access_token=access_token,
@@ -572,10 +575,8 @@ async def upload_media(
     allowed_images = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
     allowed_videos = {"video/mp4", "video/mov", "video/quicktime", "video/avi", "video/mkv"}
     allowed = allowed_images | allowed_videos
-
     if file.content_type not in allowed:
         raise HTTPException(status_code=400, detail="Only JPEG, PNG, GIF, WebP images and MP4, MOV, AVI videos are supported")
-
     contents = await file.read()    
     is_video = file.content_type in allowed_videos
     max_size = 650 * 1024 * 1024 if is_video else 8 * 1024 * 1024
@@ -584,13 +585,11 @@ async def upload_media(
             status_code=400,
             detail=f"File too large. Max size is {'650MB for videos' if is_video else '8MB for images'}"
         )
-
     try:
         upload_options = {
             "folder"        : "socialdesk",
             "resource_type" : "auto",   
         }
-
         if not is_video:
             upload_options["transformation"] = [
                 {"width": 1080, "height": 1080, "crop": "limit"},
@@ -1245,6 +1244,14 @@ def repost(post_id: int, req: CreatePostRequest, current_user: dict = Depends(ge
         approve_url  = approve_url,
         reject_url   = reject_url
     )
+    create_notification(
+        user_id = user_id,
+        type    = "hr_approval_requested",
+        title   = "Repost awaiting your approval",
+        message = f"Your repost scheduled for {scheduled_str} needs approval before it goes live.",
+        link    = f"/posts/{new_post_id}",
+        post_id = new_post_id
+    )
 
     return {
         "message"         : "Repost created ✅ Check your email (or the Pending Approval section) to approve it.",
@@ -1252,3 +1259,45 @@ def repost(post_id: int, req: CreatePostRequest, current_user: dict = Depends(ge
         "reposted_from"   : post_id,
         "scheduled_at"    : start.isoformat()
     }
+
+# ================================================================
+# NOTIFICATIONS
+# ================================================================
+
+@app.get("/notifications")
+def list_notifications(
+    unread_only: bool = Query(False),
+    limit: int = Query(50, le=200),
+    current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user["user_id"]
+    notifications = get_notifications(user_id, unread_only=unread_only, limit=limit)
+    unread_count = get_unread_notification_count(user_id)
+    return {
+        "notifications": notifications or [],
+        "total": len(notifications) if notifications else 0,
+        "unread_count": unread_count
+    }
+
+
+@app.get("/notifications/unread-count")
+def notifications_unread_count(current_user: dict = Depends(get_current_user)):
+    return {"unread_count": get_unread_notification_count(current_user["user_id"])}
+
+
+@app.patch("/notifications/{notification_id}/read")
+def read_notification(notification_id: int, current_user: dict = Depends(get_current_user)):
+    mark_notification_read(notification_id, current_user["user_id"])
+    return {"message": "Notification marked as read ✅"}
+
+
+@app.patch("/notifications/read-all")
+def read_all_notifications(current_user: dict = Depends(get_current_user)):
+    mark_all_notifications_read(current_user["user_id"])
+    return {"message": "All notifications marked as read ✅"}
+
+
+@app.delete("/notifications/{notification_id}")
+def remove_notification(notification_id: int, current_user: dict = Depends(get_current_user)):
+    delete_notification(notification_id, current_user["user_id"])
+    return {"message": "Notification deleted ✅"}

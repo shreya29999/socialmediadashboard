@@ -56,7 +56,6 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
             )
             data     = resp.json()
             holidays = data.get("response", {}).get("holidays", [])
-
             if not holidays:
                 print(f"No holidays returned for {country_code}: {data}")
                 return []
@@ -102,7 +101,6 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
         AND fetched_at > NOW() - INTERVAL '6 hours'
         LIMIT 1
     """, (country_code,), fetch="one")
-
     if cached:
         return execute_query("""
             SELECT * FROM trends_cache
@@ -110,7 +108,6 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
             AND fetched_at > NOW() - INTERVAL '6 hours'
             ORDER BY score DESC
         """, (country_code,), fetch="all") or []
-
     locale_map = {
         "IN": ("en-IN", "IN"),
         "US": ("en-US", "US"),
@@ -119,15 +116,12 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
         "CA": ("en-CA", "CA"),
     }
     hl, gl = locale_map.get(country_code, ("en-IN", "IN"))
-
     rss_urls = [
         f"https://news.google.com/rss?hl={hl}&gl={gl}&ceid={gl}:en",
         f"https://news.google.com/rss/search?q={quote(industry.split(',')[0].strip())}&hl={hl}&gl={gl}&ceid={gl}:en",
         f"https://news.google.com/rss/search?q=social+media+trends&hl={hl}&gl={gl}&ceid={gl}:en",
     ]
-
     topics = []
-
     for url in rss_urls:
         try:
             feed = feedparser.parse(url)
@@ -138,7 +132,6 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
         except Exception as e:
             print(f"⚠️ RSS feed failed for {url}: {e}")
             continue
-
     if not topics:
         print(f"⚠️ No trends fetched for {country_code}")
         return []
@@ -246,7 +239,6 @@ def filter_relevant_events(
     trends = _prefilter_trends(trends, industry)
     if not events and not trends:
         return {"relevant_events": [],"relevant_trends": []}
-
     events_list = [
         f"- {e['event_name']} on {e['event_date']} (type: {e['event_type']})"
         for e in (events or [])
@@ -304,7 +296,6 @@ Return ONLY valid JSON, no explanation, no markdown:
         raw  = response.choices[0].message.content.strip()
         raw  = raw.replace("```json", "").replace("```", "").strip()
         result = json.loads(raw)
-
     except Exception as e:
         print(f"❌ Groq relevance filter failed: {e}")
         return {"relevant_events": [], "relevant_trends": []}
@@ -341,7 +332,6 @@ def _get_rag_documents(user_id: int) -> list:
         "SELECT * FROM user_profiles WHERE user_id = %s",
         (user_id,), fetch="one"
     ) or {}
-
     if profile:
         docs.append({
             "source": "Profile",
@@ -357,7 +347,6 @@ def _get_rag_documents(user_id: int) -> list:
                 f"Posts per week: {profile.get('posts_per_week', '')}"
             )
         })
-
     recent_posts = execute_query(
         "SELECT content_text, platforms, created_at FROM post_templates WHERE user_id = %s ORDER BY created_at DESC LIMIT 8",
         (user_id,), fetch="all"
@@ -371,7 +360,6 @@ def _get_rag_documents(user_id: int) -> list:
                 f"Platforms: {', '.join(post.get('platforms', []) or [])}"
             )
         })
-
     country_code = profile.get("country_code") if profile else None
     if country_code:
         events = execute_query(
@@ -398,7 +386,6 @@ def _get_rag_documents(user_id: int) -> list:
                 "title": trend.get("topic", "Trend"),
                 "content": f"Topic: {trend.get('topic', '')}"
             })
-
     return docs
 
 
@@ -432,25 +419,21 @@ def _save_chat_turn(user_id: int, role: str, content: str):
     """, (user_id, role, content))
 
 def answer_rag_query(user_id: int, query: str) -> dict:
-    docs    = retrieve_rag_documents(user_id, query, limit=5)
+    docs = retrieve_rag_documents(user_id, query, limit=5)
     sources = [f"{doc['source']} - {doc['title']}" for doc in docs]
     context = "\n\n".join([
         f"Source: {doc['source']}\n{doc['content']}" for doc in docs
     ]) or "No relevant documents found."
-
     history = _get_chat_history(user_id, limit=6)
-
     system_prompt = f"""You are a helpful social media assistant.
 Only use the information in the context below. Do not invent facts.
 If the question is outside this context, say so.
 Context:
 {context}"""
-
     messages = [{"role": "system", "content": system_prompt}]
     for turn in history:
         messages.append({"role": turn["role"], "content": turn["content"]})
     messages.append({"role": "user", "content": query})
-
     try:
         response = groq_client.chat.completions.create(
             model       = "meta-llama/llama-4-scout-17b-16e-instruct",
@@ -461,9 +444,7 @@ Context:
         answer = response.choices[0].message.content.strip()
         _save_chat_turn(user_id, "user",      query)
         _save_chat_turn(user_id, "assistant", answer)
-
         return {"answer": answer, "sources": sources}
-
     except Exception as e:
         print(f"❌ Groq RAG query failed: {e}")
         return {"answer": "Could not answer right now.", "sources": sources}
@@ -478,23 +459,19 @@ def generate_post_content(
         "instagram" : "Engaging, visual feel. 5-10 hashtags. Under 400 characters.",
         "facebook"  : "Conversational, community feel. 2-3 hashtags. Under 500 characters."
     }
-
     trigger_context = (
         f"Upcoming event : {trigger['name']}\nPost angle :{trigger['angle']}"
         if trigger.get("type") == "event"
         else
         f"Trending topic : {trigger['name']}\nPost angle :{trigger['angle']}"
     )
-
     prompt = f"""You are a social media content writer and art director.
-
 User Profile:
 - Persona  : {profile.get('persona')}
 - Industry : {profile.get('industry')}
 - Brand    : {profile.get('brand_name')}
 - Tone     : {profile.get('tone')}
 - Audience : {profile.get('audience')}
-
 Platform      : {platform.upper()}
 Platform rules: {platform_rules.get(platform, "Keep it engaging.")}
 {trigger_context}
@@ -515,7 +492,6 @@ Return ONLY valid JSON, no explanation, no markdown:
   "caption": "the complete ready-to-publish post text",
   "image_prompt": "a short visual scene description for an image generator"
 }}"""
-
     try:
         response = groq_client.chat.completions.create(
             model       = "meta-llama/llama-4-scout-17b-16e-instruct",
@@ -530,7 +506,6 @@ Return ONLY valid JSON, no explanation, no markdown:
             "caption"     : result.get("caption", "").strip(),
             "image_prompt": result.get("image_prompt", "").strip()
         }
-
     except Exception as e:
         print(f"❌ Groq post generation failed: {e}")
         return {"caption": "", "image_prompt": ""}
@@ -539,23 +514,19 @@ Return ONLY valid JSON, no explanation, no markdown:
 async def generate_post_image(image_prompt: str, profile: dict) -> bytes:
     if not image_prompt:
         return None
-
     industry = profile.get("industry", "")
     if _is_blocked(image_prompt, industry):
         print(f"🚫 Blocked image prompt (keyword match): {image_prompt}")
         return None
-
     if not POLLINATIONS_API_KEY:
         print("❌ POLLINATIONS_API_KEY not set — skipping image generation. "
               "Get a free key at https://enter.pollinations.ai and add it to .env")
         return None
-
     tone = profile.get("tone", "")
     full_prompt = (
         f"{image_prompt}, {tone} mood, professional social media photo, "
         f"high quality, no text, no watermark, no logo"
     )
-
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
@@ -610,7 +581,6 @@ async def fetch_reddit_trends(industry: str, country_code: str) -> list:
         AND fetched_at > NOW() - INTERVAL '3 hours'
         LIMIT 1
     """, (country_code,), fetch="one")
-
     if cached:
         return execute_query("""
             SELECT * FROM trends_cache
@@ -660,7 +630,6 @@ async def fetch_reddit_trends(industry: str, country_code: str) -> list:
             INSERT INTO trends_cache (country_code, platform, topic, score)
             VALUES (%s, %s, %s, %s)
         """, (country_code, "reddit", title, score))
-
     print(f"Reddit trends fetched: {[t for t, _ in topics[:3]]}")
     return execute_query("""
         SELECT * FROM trends_cache
@@ -843,7 +812,6 @@ async def run_recommendation_pipeline(user_id: int) -> list:
     if not profile:
         print(f"No profile for user {user_id}, skipping")
         return []
-
     country_code = profile.get("country_code", "IN")
     industry     = profile.get("industry", "business")
     connected    = execute_query(
@@ -867,15 +835,12 @@ async def run_recommendation_pipeline(user_id: int) -> list:
         fetch_producthunt_trends(),
         fetch_github_trending(industry),
     )
-
     all_trends = (google_trends or []) + (reddit_trends or []) + \
                  (hn_trends    or []) + (ph_trends    or []) + \
                  (gh_trends    or [])
-
     relevant        = filter_relevant_events(events, all_trends, profile)
     generated_posts = []
     days_offset     = 0
-
     for event in relevant.get("relevant_events", []):
         already_exists = execute_query("""
             SELECT sp.id FROM scheduled_posts sp
@@ -885,11 +850,9 @@ async def run_recommendation_pipeline(user_id: int) -> list:
             AND sp.created_at::date = CURRENT_DATE
             LIMIT 1
         """, (user_id, f"%{event['event_name'][:20]}%"), fetch="one")
-
         if already_exists:
             print(f"Skipping duplicate for event: {event['event_name']}")
             continue
-
         primary_platform = "linkedin" if "linkedin" in platforms else platforms[0]
         content = generate_post_content(
             profile  = profile,
@@ -902,13 +865,11 @@ async def run_recommendation_pipeline(user_id: int) -> list:
         )
         if not content.get("caption"):
             continue
-
         media_url      = await generate_media_url(content.get("image_prompt", ""), profile)
         post_platforms = list(platforms)
         if not media_url and "instagram" in post_platforms:
             print(f"No image generated — dropping Instagram for event post: {event['event_name']}")
             post_platforms = [p for p in post_platforms if p != "instagram"]
-
         try:
             event_date   = datetime.strptime(event["event_date"], "%Y-%m-%d")
             scheduled_at = event_date - timedelta(days=3)
@@ -918,7 +879,6 @@ async def run_recommendation_pipeline(user_id: int) -> list:
                 scheduled_at = scheduled_at.replace(hour=9, minute=0, second=0)
         except Exception:
             scheduled_at = datetime.now(timezone.utc) + timedelta(days=days_offset + 1)
-
         generated_posts.append({
             "content_text" : content["caption"],
             "platforms"    : post_platforms,
@@ -928,7 +888,6 @@ async def run_recommendation_pipeline(user_id: int) -> list:
             "media_url"    : media_url
         })
         days_offset += 2
-
     for trend in relevant.get("relevant_trends", []):
         already_exists = execute_query("""
             SELECT sp.id FROM scheduled_posts sp
@@ -938,11 +897,9 @@ async def run_recommendation_pipeline(user_id: int) -> list:
             AND sp.created_at::date = CURRENT_DATE
             LIMIT 1
         """, (user_id, f"%{trend['topic'][:20]}%"), fetch="one")
-
         if already_exists:
             print(f"Skipping duplicate for trend: {trend['topic']}")
             continue
-
         primary_platform = "linkedin" if "linkedin" in platforms else platforms[0]
         content = generate_post_content(
             profile  = profile,
@@ -955,16 +912,13 @@ async def run_recommendation_pipeline(user_id: int) -> list:
         )
         if not content.get("caption"):
             continue
-
         media_url      = await generate_media_url(content.get("image_prompt", ""), profile)
         post_platforms = list(platforms)
         if not media_url and "instagram" in post_platforms:
             print(f"No image generated — dropping Instagram for trend post: {trend['topic']}")
             post_platforms = [p for p in post_platforms if p != "instagram"]
-
         scheduled_at = datetime.now(timezone.utc) + timedelta(days=days_offset + 1)
         scheduled_at = scheduled_at.replace(hour=9, minute=0, second=0)
-
         generated_posts.append({
             "content_text" : content["caption"],
             "platforms"    : post_platforms,
@@ -974,7 +928,6 @@ async def run_recommendation_pipeline(user_id: int) -> list:
             "media_url"    : media_url
         })
         days_offset += 2
-
     logger.info("Generated %s posts for user %s", len(generated_posts), user_id)
     return generated_posts
 
