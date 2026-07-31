@@ -1154,7 +1154,6 @@ def superadmin_get_users(current_user: dict = Depends(get_current_superadmin)):
     users = get_all_users()
     return {"users": users, "total": len(users) if users else 0}
 
-
 @app.get("/superadmin/posts")
 def superadmin_get_all_posts(
     status: Optional[str] = None,
