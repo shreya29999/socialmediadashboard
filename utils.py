@@ -48,11 +48,14 @@ def verify_confirmation_token(raw_token: str, hashed_token: str) -> bool:
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(plain_password: str) -> str:
-    return pwd_context.hash(plain_password)
+    pw_bytes = plain_password.encode("utf-8")[:72]
+    return pwd_context.hash(pw_bytes.decode("utf-8", errors="ignore"))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    pw_bytes = plain_password.encode("utf-8")[:72]
+    return pwd_context.verify(pw_bytes.decode("utf-8", errors="ignore"), hashed_password)
+
 
 def calculate_next_dates(
     recurrence_type : str,
@@ -144,7 +147,6 @@ def calculate_single_next_date(
         return None
     if not _is_valid_date(next_date, end_date, max_occurrences, occurrence_count):
         return None
-
     return next_date
 
 
@@ -191,7 +193,7 @@ def _add_one_month(dt: datetime) -> datetime:
     max_day = calendar.monthrange(year, month)[1]
     day     = min(dt.day, max_day)
 
-    return dt.replace(year=year, month=month, day=day)
+    return dt.replace(year=year,month=month,day=day)
 
 def refresh_facebook_token(current_token: str) -> Optional[dict]:
     try:
