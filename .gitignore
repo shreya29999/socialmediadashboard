@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 celerybeat-schedule.*
 .pytest_cache/
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
