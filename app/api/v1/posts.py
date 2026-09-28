@@ -194,7 +194,6 @@ def delete_post(post_id: int, current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Not your post")
     if post["status"] == "posted":
         raise HTTPException(status_code=400, detail="Cannot delete an already published post")
-    from database import execute_query
     execute_query("DELETE FROM post_targets WHERE scheduled_post_id = %s", (post_id,))
     execute_query("DELETE FROM scheduled_posts WHERE id = %s",     (post_id,))
 

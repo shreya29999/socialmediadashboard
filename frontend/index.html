@@ -1216,7 +1216,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 </div>
 
 <script>
-const API_BASE = 'http://localhost:8001';
+const API_BASE = window.SOCIAL_DASHBOARD_API_BASE || (
+  ['http:', 'https:'].includes(window.location.protocol)
+    ? window.location.origin
+    : 'http://localhost:8001'
+);
 
 let state = {
   user: null, token: null,
@@ -1225,6 +1229,7 @@ let state = {
   calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
   logFilter: 'all', rejectPostId: null,
   userProfile: null,
+  analytics: null,
   role:null
 };
 
@@ -1259,7 +1264,12 @@ async function apiRequest(path, options = {}) {
   const res = await fetch(`${API_BASE}${path}`, opts);
   const ct = res.headers.get('content-type') || '';
   const data = ct.includes('application/json') ? await res.json() : null;
-  if (!res.ok) throw new Error(data?.detail || data?.message || res.statusText);
+  if (!res.ok) {
+    const detail = Array.isArray(data?.detail)
+      ? data.detail.map(item => item.msg || item.message).filter(Boolean).join('; ')
+      : data?.detail;
+    throw new Error(detail || data?.message || res.statusText);
+  }
   return data;
 }
 async function apiPost(path, body) { return apiRequest(path, { method: 'POST', body }); }
@@ -1580,7 +1590,9 @@ function goDashboard() {
   document.getElementById('schedule-dt').value=`${n.getFullYear()}-${pad(n.getMonth()+1)}-${pad(n.getDate())}T${pad(n.getHours())}:${pad(n.getMinutes())}`;
   showScreen('screen-dashboard');
   updateConnectScreen(); updatePlatformStatus();
-  renderAll(); loadPostsFromBackend();
+  renderAll();
+  loadPostsFromBackend();
+  loadAnalyticsFromBackend();
 }
 
 function updatePlatformStatus() {
@@ -1602,9 +1614,12 @@ function renderAll() {
 }
 
 function updateMetrics() {
-  document.getElementById('m-scheduled').textContent = state.posts.filter(p=>p.status==='scheduled').length;
-  document.getElementById('m-published').textContent = state.posts.filter(p=>p.status==='posted').length;
-  document.getElementById('m-pending').textContent = state.posts.filter(p=>['awaiting_hr_approval','awaiting_admin_approval'].includes(p.status)).length;
+  const summary = state.analytics?.summary;
+  document.getElementById('m-scheduled').textContent = summary?.scheduled ?? state.posts.filter(p=>p.status==='scheduled').length;
+  document.getElementById('m-published').textContent = summary?.posted ?? state.posts.filter(p=>p.status==='posted').length;
+  document.getElementById('m-pending').textContent = summary
+    ? (summary.awaiting_hr_approval || 0) + (summary.awaiting_admin_approval || 0)
+    : state.posts.filter(p=>['awaiting_hr_approval','awaiting_admin_approval'].includes(p.status)).length;
 }
 
 // ═══ AI GENERATION ═══
@@ -1815,6 +1830,15 @@ async function loadPostsFromBackend() {
     }));
     saveState(); renderAll();
   } catch(e) { console.warn('Failed to load posts:', e); }
+}
+
+async function loadAnalyticsFromBackend() {
+  if (!state.token) return;
+  try {
+    state.analytics = await apiGet('/analytics');
+    saveState();
+    updateMetrics();
+  } catch(e) { console.warn('Failed to load analytics:', e); }
 }
 
 // ═══ UPCOMING ═══

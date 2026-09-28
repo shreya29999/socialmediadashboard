@@ -272,7 +272,7 @@ def create_schema():
             """)
 
         conn.commit()
-        print("✅ All tables created")
+        print("All tables created")
     except Exception as e:
         conn.rollback()
         raise e
