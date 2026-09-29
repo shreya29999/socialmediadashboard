@@ -16,3 +16,4 @@ croniter
 groq
 feedparser
 httpx
+openai

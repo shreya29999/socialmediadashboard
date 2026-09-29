@@ -15,6 +15,11 @@ ALLOWED_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+
+#OPEN AI
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
+
 # META CONFIGURATION
 
 META_APP_ID = os.getenv("META_APP_ID")
