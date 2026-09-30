@@ -9,7 +9,10 @@ import httpx
 import os
 from dotenv import load_dotenv
 from app.core.logging import logger
-
+from app.repositories.social_account_repository import (
+    get_social_account,
+    update_access_token,
+)
 load_dotenv()
 
 JWT_SECRET     = os.getenv("JWT_SECRET_KEY")
@@ -261,8 +264,8 @@ def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
     
 
 def check_and_refresh_token(user_id: int, platform: str) -> Optional[str]:
-    from app.db.database import get_social_account, update_access_token
 
+    
     account = get_social_account(user_id, platform)
     if not account:
         logger.error("No %s account found for user %s", platform, user_id)

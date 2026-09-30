@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies import get_current_user
-from app.db.database import execute_query
+from app.repositories.rag_repository import clear_rag_history
 from app.schemas.ai import RagQueryRequest
 from app.ai.event_fetcher import answer_rag_query
 from app.workers.tasks import generate_ai_posts_task
-
+from app.repositories.rag_repository import clear_rag_history as clear_rag_history_repo
 router = APIRouter(prefix="/ai", tags=["AI"])
 
 
@@ -29,8 +29,6 @@ def rag_query(req: RagQueryRequest, current_user: dict = Depends(get_current_use
 
 @router.delete("/rag/history")
 def clear_rag_history(current_user: dict = Depends(get_current_user)):
-    execute_query(
-        "DELETE FROM rag_chat_history WHERE user_id = %s",
-        (current_user["user_id"],)
-    )
+    clear_rag_history_repo(current_user["user_id"])
+
     return {"message": "Chat history cleared ✅"}

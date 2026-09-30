@@ -43,6 +43,13 @@ CLOUDINARY_API_SECRET = os.getenv("CLOUDINARY_API_SECRET")
 
 BASE_URL = os.getenv("BASE_URL")
 
+# DATABASE CONFIGURATION
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg2://postgres:postgres@localhost:5432/social_dashboard",
+)
+
 # REDIS CONFIGURATION
 
 

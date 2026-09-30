@@ -2,6 +2,8 @@ fastapi
 bcrypt==4.0.1
 uvicorn
 psycopg2-binary
+SQLAlchemy
+alembic
 celery
 redis
 httpx

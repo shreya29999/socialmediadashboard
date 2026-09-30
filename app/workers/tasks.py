@@ -1,13 +1,12 @@
 from celery.signals import worker_process_init
-
 from app.workers.celery_app import celery_app
 import os
-from app.db.database import execute_query
-from app.db.database import init_db
+import asyncio
 from datetime import datetime, timezone
 import time
+from app.services.post_service import PostService
 from app.ai.event_fetcher import run_recommendation_pipeline_sync
-from app.db.database import (
+from app.repositories.worker_repository import (
     get_posts_due_for_confirmation,
     get_expired_awaiting_posts,
     get_post_by_id,
@@ -22,15 +21,20 @@ from app.db.database import (
     increment_occurrence_count,
     get_template_by_id,
     create_scheduled_post,
-    get_user_by_id,
     create_approval_stage,
     update_hr_approval,
-    save_admin_token,         
+    save_admin_token,
     get_approval_stage,
-    update_last_login,
     get_posts_ready_to_publish,
-    create_notification
 )
+from app.repositories.social_account_repository import get_social_account
+from app.repositories.notification_repository import create_notification
+from app.repositories.post_repository import (
+    create_ai_generated_post,
+    has_ai_generated_post_for_trigger_today,
+    mark_template_completed,
+)
+from app.repositories.user_repository import get_user_by_id, get_users_with_complete_profiles
 from app.services.email import (
     send_confirmation_email,
     send_success_email,
@@ -51,8 +55,61 @@ BASE_URL = os.getenv("BASE_URL")
 
 @worker_process_init.connect
 def init_worker(**kwargs):
-    init_db()
-    logger.info("Celery worker DB initialized")
+    logger.info("Celery worker initialized")
+
+@celery_app.task(
+    bind=True,
+    name="tasks.generate_post_task",
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_kwargs={"max_retries": 3},
+)
+def generate_post_task(
+    self,
+    user_id: int,
+    title: str,
+    platform: str,
+    generate_image: bool = True,
+    scheduled_at: str | None = None,
+):
+    logger.info(
+        "Starting async post generation | user_id=%s | title=%s | platform=%s",
+        user_id,
+        title,
+        platform,
+    )
+
+    try:
+        parsed_scheduled_at = None
+
+        if scheduled_at:
+            parsed_scheduled_at = datetime.fromisoformat(scheduled_at)
+
+        result = asyncio.run(
+            PostService.generate_and_store(
+                user_id=user_id,
+                title=title,
+                platform=platform,
+                generate_image=generate_image,
+                scheduled_at=parsed_scheduled_at,
+            )
+        )
+
+        logger.info(
+            "Async post generation completed | user_id=%s | post_id=%s",
+            user_id,
+            result.get("post_id"),
+        )
+
+        return result
+
+    except Exception:
+        logger.exception(
+            "Async post generation failed | user_id=%s | title=%s",
+            user_id,
+            title,
+        )
+        raise
 
 
 @celery_app.task(name="tasks.send_confirmation_task")
@@ -319,8 +376,11 @@ def publish_post_task(self, post_id: int):
 
 def _publish_to_facebook(post: dict, access_token: str) -> dict:
     import httpx
-    from database import get_social_account
+
     account = get_social_account(post["user_id"], "facebook")
+    if not account:
+        return {"success": False, "error": "Facebook account not connected"}
+
     page_id = account["page_id"]
     media_url = post.get("media_url")
     is_video  = _is_video_url(media_url)
@@ -381,7 +441,6 @@ def _publish_to_facebook(post: dict, access_token: str) -> dict:
 
 def _publish_to_instagram(post: dict, access_token: str) -> dict:
     import httpx
-    from database import get_social_account
 
     account = get_social_account(post["user_id"], "instagram")
     if not account:
@@ -579,9 +638,12 @@ def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dic
 
 def _publish_to_linkedin(post: dict, access_token: str) -> dict:
     import httpx
-    from database import get_social_account
-    account   = get_social_account(post["user_id"], "linkedin")
-    user_urn  = account["page_id"]
+
+    account = get_social_account(post["user_id"], "linkedin")
+    if not account:
+        return {"success": False, "error": "LinkedIn account not connected"}
+
+    user_urn = account["page_id"]
     media_url = post.get("media_url")
     is_video  = _is_video_url(media_url)
     headers = {
@@ -684,11 +746,7 @@ def _generate_next_occurrence(post: dict):
         )
         if not next_date:
             logger.info("Template %s has completed all occurrences", template["id"])
-            from app.db.database import execute_query
-            execute_query(
-                "UPDATE post_templates SET status = 'completed' WHERE id = %s",
-                (template["id"],)
-            )
+            mark_template_completed(template["id"])
             return
         new_post = create_scheduled_post(template["id"], next_date)
         increment_occurrence_count(template["id"])
@@ -712,48 +770,21 @@ def generate_ai_posts_task(user_id: int):
         created_count = 0
         for post_data in posts:
             try:
-                duplicate = execute_query("""
-                    SELECT sp.id FROM scheduled_posts sp
-                    WHERE sp.trigger_name = %s
-                    AND sp.ai_generated = TRUE
-                    AND sp.created_at::date = CURRENT_DATE
-                    AND EXISTS (
-                        SELECT 1 FROM post_templates pt
-                        WHERE pt.id = sp.template_id
-                        AND pt.user_id = %s
-                    )
-                    LIMIT 1
-                """, (post_data.get("trigger_name"), user_id), fetch="one")
-                if duplicate:
+                if has_ai_generated_post_for_trigger_today(
+                    user_id,
+                    post_data.get("trigger_name"),
+                ):
                     logger.info("Duplicate skipped: %s", post_data.get('trigger_name'))
                     continue
-                template = execute_query("""
-                    INSERT INTO post_templates
-                        (user_id, content_text, media_url, platforms,
-                         recurrence_type, interval_days, start_date, timezone)
-                    VALUES (%s, %s, %s, %s, 'ONE_TIME', 1, %s, 'UTC')
-                    RETURNING id
-                """, (
-                    user_id,
-                    post_data["content_text"],
-                    post_data.get("media_url"),
-                    post_data["platforms"],
-                    post_data["scheduled_at"]
-                ), fetch="one")
-                if not template:
-                    continue
-                template_id = template["id"]
-                post = execute_query("""
-                    INSERT INTO scheduled_posts
-                        (template_id, scheduled_at, status, ai_generated, trigger_type, trigger_name)
-                    VALUES (%s, %s, 'scheduled', TRUE, %s, %s)
-                    RETURNING id
-                """, (
-                    template_id,
-                    post_data["scheduled_at"],
-                    post_data.get("trigger_type"),
-                    post_data.get("trigger_name")
-                ), fetch="one")
+                post = create_ai_generated_post(
+                    user_id=user_id,
+                    content_text=post_data["content_text"],
+                    media_url=post_data.get("media_url"),
+                    platforms=post_data["platforms"],
+                    scheduled_at=post_data["scheduled_at"],
+                    trigger_type=post_data.get("trigger_type"),
+                    trigger_name=post_data.get("trigger_name"),
+                )
                 if not post:
                     continue
                 created_count += 1
@@ -774,14 +805,7 @@ def generate_ai_posts_task(user_id: int):
 
 @celery_app.task(name="tasks.generate_ai_posts_for_all_users")
 def generate_ai_posts_for_all_users():
-    users = execute_query("""
-        SELECT user_id FROM user_profiles
-        WHERE persona IS NOT NULL
-        AND industry IS NOT NULL
-        AND brand_name IS NOT NULL
-        AND tone IS NOT NULL
-        AND country_code IS NOT NULL
-    """, fetch="all")
+    users = get_users_with_complete_profiles()
     if not users:
         logger.warning("No users with completed profiles found")
         return

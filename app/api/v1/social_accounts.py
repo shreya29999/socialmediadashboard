@@ -2,7 +2,7 @@ import httpx
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_current_user
-from app.db.database import get_social_account
+from app.repositories.social_account_repository import get_social_account
 
 router = APIRouter(prefix="/platforms", tags=["Social Accounts"])
 

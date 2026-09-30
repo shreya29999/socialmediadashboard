@@ -9,7 +9,32 @@ from urllib.parse import quote
 from datetime import datetime, timedelta, timezone
 import cloudinary
 import cloudinary.uploader
-from app.db.database import execute_query
+
+from app.repositories.cache_repository import (
+    get_cached_events,
+    has_fresh_events_cache,
+    delete_events_cache,
+    save_event,
+    has_fresh_trends_cache,
+    get_cached_trends,
+    delete_trends_cache,
+    save_trend,
+)
+
+from app.repositories.rag_repository import (
+    get_rag_profile,
+    get_recent_posts_for_rag,
+    get_events_for_rag,
+    get_trends_for_rag,
+    get_chat_history,
+    save_chat_turn,
+)
+from app.repositories.user_repository import get_user_profile
+from app.repositories.recommendation_repository import (
+    get_connected_platforms,
+    has_duplicate_post_for_trigger,
+)
+
 from app.core.logging import logger
 from app.ai.llm import generate_llm_response, AI_PROVIDER
 
@@ -45,31 +70,8 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
     if not year:
         year = datetime.now().year
 
-    cached = execute_query(
-        """
-        SELECT id
-        FROM events_cache
-        WHERE country_code = %s
-        AND fetched_at::date = CURRENT_DATE
-        LIMIT 1
-        """,
-        (country_code,),
-        fetch="one"
-    )
-
-    if cached:
-        return execute_query(
-            """
-            SELECT *
-            FROM events_cache
-            WHERE country_code = %s
-            AND event_date >= CURRENT_DATE
-            AND event_date <= CURRENT_DATE + INTERVAL '30 days'
-            ORDER BY event_date ASC
-            """,
-            (country_code,),
-            fetch="all"
-        ) or []
+    if has_fresh_events_cache(country_code):
+        return get_cached_events(country_code)
 
     try:
 
@@ -94,10 +96,7 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
                 )
                 return []
 
-            execute_query(
-                "DELETE FROM events_cache WHERE country_code = %s",
-                (country_code,)
-            )
+            delete_events_cache(country_code)
 
             for h in holidays:
 
@@ -114,25 +113,12 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
                     else event_type
                 )
 
-                execute_query(
-                    """
-                    INSERT INTO events_cache
-                        (
-                            country_code,
-                            event_name,
-                            event_date,
-                            event_type,
-                            raw_data
-                        )
-                    VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (
-                        country_code,
-                        h.get("name"),
-                        event_date,
-                        event_type,
-                        json.dumps(h)
-                    )
+                save_event(
+                    country_code=country_code,
+                    event_name=h.get("name"),
+                    event_date=event_date,
+                    event_type=event_type,
+                    raw_data=h
                 )
 
             logger.info(
@@ -148,19 +134,7 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
         )
         return []
 
-    return execute_query(
-        """
-        SELECT *
-        FROM events_cache
-        WHERE country_code = %s
-        AND event_date >= CURRENT_DATE
-        AND event_date <= CURRENT_DATE + INTERVAL '30 days'
-        ORDER BY event_date ASC
-        """,
-        (country_code,),
-        fetch="all"
-    ) or []
-
+    return get_cached_events(country_code)
 
 # ============================================================
 # GOOGLE NEWS TRENDS
@@ -168,32 +142,16 @@ async def fetch_holidays(country_code: str, year: int = None) -> list:
 
 def fetch_google_trends(country_code: str, industry: str) -> list:
 
-    cached = execute_query(
-        """
-        SELECT id
-        FROM trends_cache
-        WHERE country_code = %s
-        AND platform = 'google_news'
-        AND fetched_at > NOW() - INTERVAL '6 hours'
-        LIMIT 1
-        """,
-        (country_code,),
-        fetch="one"
-    )
-
-    if cached:
-        return execute_query(
-            """
-            SELECT *
-            FROM trends_cache
-            WHERE country_code = %s
-            AND platform = 'google_news'
-            AND fetched_at > NOW() - INTERVAL '6 hours'
-            ORDER BY score DESC
-            """,
-            (country_code,),
-            fetch="all"
-        ) or []
+    if has_fresh_trends_cache(
+        country_code=country_code,
+        platform="google_news",
+        hours=6,
+    ):
+        return get_cached_trends(
+            country_code=country_code,
+            platform="google_news",
+            hours=6,
+        )
 
     locale_map = {
         "IN": ("en-IN", "IN"),
@@ -255,34 +213,18 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
 
         return []
 
-    execute_query(
-        """
-        DELETE FROM trends_cache
-        WHERE country_code = %s
-        AND platform = 'google_news'
-        """,
-        (country_code,)
+    delete_trends_cache(
+        platform="google_news",
+        country_code=country_code,
     )
 
     for i, topic in enumerate(topics[:15]):
 
-        execute_query(
-            """
-            INSERT INTO trends_cache
-                (
-                    country_code,
-                    platform,
-                    topic,
-                    score
-                )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                country_code,
-                "google_news",
-                topic,
-                15 - i
-            )
+        save_trend(
+            country_code=country_code,
+            platform="google_news",
+            topic=topic,
+            score=15 - i,
         )
 
     logger.info(
@@ -290,19 +232,10 @@ def fetch_google_trends(country_code: str, industry: str) -> list:
         country_code
     )
 
-    return execute_query(
-        """
-        SELECT *
-        FROM trends_cache
-        WHERE country_code = %s
-        AND platform = 'google_news'
-        ORDER BY score DESC
-        """,
-        (country_code,),
-        fetch="all"
-    ) or []
-
-
+    return get_cached_trends(
+        country_code=country_code,
+        platform="google_news",
+    )
 # ============================================================
 # CONTENT FILTERING
 # ============================================================
@@ -791,14 +724,9 @@ def _get_rag_documents(
 
     docs = []
 
-    profile = execute_query(
-        "SELECT * FROM user_profiles WHERE user_id = %s",
-        (user_id,),
-        fetch="one"
-    ) or {}
+    profile = get_rag_profile(user_id) or {}
 
     if profile:
-
         docs.append(
             {
                 "source": "Profile",
@@ -816,111 +744,54 @@ def _get_rag_documents(
             }
         )
 
-    recent_posts = execute_query(
-        """
-        SELECT
-            content_text,
-            platforms,
-            created_at
-        FROM post_templates
-        WHERE user_id = %s
-        ORDER BY created_at DESC
-        LIMIT 8
-        """,
-        (user_id,),
-        fetch="all"
-    ) or []
+    recent_posts = get_recent_posts_for_rag(user_id, limit=8)
 
     for post in recent_posts:
+        platforms = post.get("platforms") or []
+        if isinstance(platforms, str):
+            platforms = [platforms]
 
         docs.append(
             {
                 "source": "Recent post",
-                "title": post.get(
-                    "created_at",
-                    "Recent post"
-                ),
+                "title": post.get("created_at", "Recent post"),
                 "content": (
                     f"Content: {post.get('content_text', '')}\n"
-                    f"Platforms: "
-                    f"{', '.join(post.get('platforms', []) or [])}"
+                    f"Platforms: {', '.join(platforms)}"
                 )
             }
         )
 
-    country_code = (
-        profile.get("country_code")
-        if profile
-        else None
-    )
+    country_code = profile.get("country_code") if profile else None
 
     if country_code:
-
-        events = execute_query(
-            """
-            SELECT
-                event_name,
-                event_date,
-                event_type
-            FROM events_cache
-            WHERE country_code = %s
-            ORDER BY event_date ASC
-            LIMIT 8
-            """,
-            (country_code,),
-            fetch="all"
-        ) or []
+        events = get_events_for_rag(country_code, limit=8)
 
         for event in events:
-
             docs.append(
                 {
                     "source": "Upcoming event",
-                    "title": event.get(
-                        "event_name",
-                        "Event"
-                    ),
+                    "title": event.get("event_name", "Event"),
                     "content": (
-                        f"Event: "
-                        f"{event.get('event_name', '')}\n"
-                        f"Date: "
-                        f"{event.get('event_date', '')}\n"
-                        f"Type: "
-                        f"{event.get('event_type', '')}"
+                        f"Event: {event.get('event_name', '')}\n"
+                        f"Date: {event.get('event_date', '')}\n"
+                        f"Type: {event.get('event_type', '')}"
                     )
                 }
             )
 
-        trends = execute_query(
-            """
-            SELECT topic
-            FROM trends_cache
-            WHERE country_code = %s
-            ORDER BY score DESC
-            LIMIT 8
-            """,
-            (country_code,),
-            fetch="all"
-        ) or []
+        trends = get_trends_for_rag(country_code, limit=8)
 
         for trend in trends:
-
             docs.append(
                 {
                     "source": "Trending topic",
-                    "title": trend.get(
-                        "topic",
-                        "Trend"
-                    ),
-                    "content": (
-                        f"Topic: "
-                        f"{trend.get('topic', '')}"
-                    )
+                    "title": trend.get("topic", "Trend"),
+                    "content": f"Topic: {trend.get('topic', '')}"
                 }
             )
 
     return docs
-
 
 def retrieve_rag_documents(
     user_id: int,
@@ -961,22 +832,7 @@ def _get_chat_history(
     user_id: int,
     limit: int = 6
 ) -> list:
-
-    rows = execute_query(
-        """
-        SELECT
-            role,
-            content
-        FROM rag_chat_history
-        WHERE user_id = %s
-        ORDER BY created_at DESC
-        LIMIT %s
-        """,
-        (user_id, limit),
-        fetch="all"
-    ) or []
-
-    return list(reversed(rows))
+    return get_chat_history(user_id=user_id, limit=limit)
 
 
 def _save_chat_turn(
@@ -984,25 +840,11 @@ def _save_chat_turn(
     role: str,
     content: str
 ):
-
-    execute_query(
-        """
-        INSERT INTO rag_chat_history
-            (user_id, role, content)
-        VALUES (%s, %s, %s)
-        """,
-        (
-            user_id,
-            role,
-            content
-        )
+    return save_chat_turn(
+        user_id=user_id,
+        role=role,
+        content=content,
     )
-
-
-# ============================================================
-# LLM - RAG QUERY
-# ============================================================
-
 
 def answer_rag_query(user_id: int, query: str) -> dict:
     """
@@ -1589,111 +1431,45 @@ async def fetch_reddit_trends(
     country_code: str
 ) -> list:
 
-    cached = execute_query(
-        """
-        SELECT id
-        FROM trends_cache
-        WHERE country_code = %s
-        AND platform = 'reddit'
-        AND fetched_at > NOW() - INTERVAL '3 hours'
-        LIMIT 1
-        """,
-        (country_code,),
-        fetch="one"
-    )
-
-    if cached:
-
-        return execute_query(
-            """
-            SELECT *
-            FROM trends_cache
-            WHERE country_code = %s
-            AND platform = 'reddit'
-            AND fetched_at > NOW() - INTERVAL '3 hours'
-            ORDER BY score DESC
-            """,
-            (country_code,),
-            fetch="all"
-        ) or []
+    if has_fresh_trends_cache(
+        country_code=country_code,
+        platform="reddit",
+        hours=3,
+    ):
+        return get_cached_trends(
+            country_code=country_code,
+            platform="reddit",
+            hours=3,
+        )
 
     INDUSTRY_SUBREDDITS = {
-        "tech": [
-            "technology",
-            "programming",
-            "artificial"
-        ],
-        "marketing": [
-            "marketing",
-            "socialmedia",
-            "digital_marketing"
-        ],
-        "finance": [
-            "investing",
-            "personalfinance",
-            "entrepreneur"
-        ],
-        "health": [
-            "health",
-            "fitness",
-            "nutrition"
-        ],
-        "education": [
-            "education",
-            "learnprogramming",
-            "Teachers"
-        ],
-        "ecommerce": [
-            "ecommerce",
-            "entrepreneur",
-            "smallbusiness"
-        ],
-        "design": [
-            "design",
-            "graphic_design",
-            "UI_Design"
-        ],
-        "saas": [
-            "SaaS",
-            "startups",
-            "entrepreneur"
-        ],
+        "tech": ["technology", "programming", "artificial"],
+        "marketing": ["marketing", "socialmedia", "digital_marketing"],
+        "finance": ["investing", "personalfinance", "entrepreneur"],
+        "health": ["health", "fitness", "nutrition"],
+        "education": ["education", "learnprogramming", "Teachers"],
+        "ecommerce": ["ecommerce", "entrepreneur", "smallbusiness"],
+        "design": ["design", "graphic_design", "UI_Design"],
+        "saas": ["SaaS", "startups", "entrepreneur"],
     }
 
-    keyword = (
-        industry
-        .split(",")[0]
-        .strip()
-        .lower()
-    )
-
+    keyword = (industry or "").split(",")[0].strip().lower()
     subreddits = INDUSTRY_SUBREDDITS.get(
         keyword,
-        [
-            "technology",
-            "business"
-        ]
+        ["technology", "business"],
     )
 
     topics = []
 
     try:
-
         async with httpx.AsyncClient(
             timeout=15.0,
-            headers={
-                "User-Agent":
-                "socialdesk-trends/1.0"
-            }
+            headers={"User-Agent": "socialdesk-trends/1.0"},
         ) as client:
-
             for sub in subreddits[:2]:
-
                 resp = await client.get(
                     f"https://www.reddit.com/r/{sub}/hot.json",
-                    params={
-                        "limit": 5
-                    }
+                    params={"limit": 5},
                 )
 
                 if resp.status_code != 200:
@@ -1706,131 +1482,63 @@ async def fetch_reddit_trends(
                 )
 
                 for post in posts:
-
                     title = (
                         post.get("data", {})
                         .get("title", "")
                         .strip()
                     )
+                    score = post.get("data", {}).get("score", 0)
 
-                    score = (
-                        post.get("data", {})
-                        .get("score", 0)
-                    )
-
-                    if (
-                        title
-                        and title not in topics
-                    ):
-
-                        topics.append(
-                            (
-                                title,
-                                score
-                            )
-                        )
+                    if title and title not in [t[0] for t in topics]:
+                        topics.append((title, score))
 
     except Exception:
-
-        logger.exception(
-            "Reddit trend fetch failed"
-        )
-
+        logger.exception("Reddit trend fetch failed")
         return []
 
     if not topics:
         return []
 
-    execute_query(
-        """
-        DELETE FROM trends_cache
-        WHERE country_code = %s
-        AND platform = 'reddit'
-        """,
-        (country_code,)
+    delete_trends_cache(
+        platform="reddit",
+        country_code=country_code,
     )
 
     for title, score in topics[:10]:
-
-        execute_query(
-            """
-            INSERT INTO trends_cache
-                (
-                    country_code,
-                    platform,
-                    topic,
-                    score
-                )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                country_code,
-                "reddit",
-                title,
-                score
-            )
+        save_trend(
+            country_code=country_code,
+            platform="reddit",
+            topic=title,
+            score=score,
         )
 
-    logger.info(
-        "Reddit trends fetched for %s",
-        country_code
+    logger.info("Reddit trends fetched for %s", country_code)
+
+    return get_cached_trends(
+        country_code=country_code,
+        platform="reddit",
     )
-
-    return execute_query(
-        """
-        SELECT *
-        FROM trends_cache
-        WHERE country_code = %s
-        AND platform = 'reddit'
-        ORDER BY score DESC
-        """,
-        (country_code,),
-        fetch="all"
-    ) or []
-
-
-# ============================================================
-# HACKER NEWS
-# ============================================================
 
 async def fetch_hackernews_trends() -> list:
 
-    cached = execute_query(
-        """
-        SELECT id
-        FROM trends_cache
-        WHERE platform = 'hackernews'
-        AND fetched_at > NOW() - INTERVAL '3 hours'
-        LIMIT 1
-        """,
-        fetch="one"
-    )
-
-    if cached:
-
-        return execute_query(
-            """
-            SELECT *
-            FROM trends_cache
-            WHERE platform = 'hackernews'
-            AND fetched_at > NOW() - INTERVAL '3 hours'
-            ORDER BY score DESC
-            """,
-            fetch="all"
-        ) or []
+    if has_fresh_trends_cache(
+        country_code=None,
+        platform="hackernews",
+        hours=3,
+    ):
+        return get_cached_trends(
+            country_code=None,
+            platform="hackernews",
+            hours=3,
+        )
 
     topics = []
 
     try:
-
-        async with httpx.AsyncClient(
-            timeout=15.0
-        ) as client:
-
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(
                 "https://hacker-news.firebaseio.com/v0/topstories.json"
             )
-
             top_ids = resp.json()[:10]
 
             story_resps = await asyncio.gather(
@@ -1840,225 +1548,105 @@ async def fetch_hackernews_trends() -> list:
                     )
                     for sid in top_ids
                 ],
-                return_exceptions=True
+                return_exceptions=True,
             )
 
-            for r in story_resps:
-
-                if isinstance(
-                    r,
-                    Exception
-                ):
+            for response in story_resps:
+                if isinstance(response, Exception):
                     continue
 
-                story = r.json()
-
-                title = (
-                    story.get(
-                        "title",
-                        ""
-                    ).strip()
-                )
-
-                score = story.get(
-                    "score",
-                    0
-                )
+                story = response.json()
+                title = story.get("title", "").strip()
+                score = story.get("score", 0)
 
                 if title:
-
-                    topics.append(
-                        (
-                            title,
-                            score
-                        )
-                    )
+                    topics.append((title, score))
 
     except Exception:
-
-        logger.exception(
-            "HackerNews fetch failed"
-        )
-
+        logger.exception("HackerNews fetch failed")
         return []
 
     if not topics:
         return []
 
-    execute_query(
-        "DELETE FROM trends_cache WHERE platform = 'hackernews'"
-    )
+    delete_trends_cache(platform="hackernews")
 
     for title, score in topics[:10]:
-
-        execute_query(
-            """
-            INSERT INTO trends_cache
-                (
-                    country_code,
-                    platform,
-                    topic,
-                    score
-                )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                "GLOBAL",
-                "hackernews",
-                title,
-                score
-            )
+        save_trend(
+            country_code="GLOBAL",
+            platform="hackernews",
+            topic=title,
+            score=score,
         )
 
-    logger.info(
-        "HackerNews trends fetched"
+    logger.info("HackerNews trends fetched")
+
+    return get_cached_trends(
+        country_code=None,
+        platform="hackernews",
     )
-
-    return execute_query(
-        """
-        SELECT *
-        FROM trends_cache
-        WHERE platform = 'hackernews'
-        ORDER BY score DESC
-        """,
-        fetch="all"
-    ) or []
-
-
-# ============================================================
-# PRODUCT HUNT
-# ============================================================
 
 async def fetch_producthunt_trends() -> list:
 
-    cached = execute_query(
-        """
-        SELECT id
-        FROM trends_cache
-        WHERE platform = 'producthunt'
-        AND fetched_at > NOW() - INTERVAL '6 hours'
-        LIMIT 1
-        """,
-        fetch="one"
-    )
-
-    if cached:
-
-        return execute_query(
-            """
-            SELECT *
-            FROM trends_cache
-            WHERE platform = 'producthunt'
-            AND fetched_at > NOW() - INTERVAL '6 hours'
-            ORDER BY score DESC
-            """,
-            fetch="all"
-        ) or []
+    if has_fresh_trends_cache(
+        country_code=None,
+        platform="producthunt",
+        hours=6,
+    ):
+        return get_cached_trends(
+            country_code=None,
+            platform="producthunt",
+            hours=6,
+        )
 
     topics = []
 
     try:
-
-        feed = feedparser.parse(
-            "https://www.producthunt.com/feed"
-        )
+        feed = feedparser.parse("https://www.producthunt.com/feed")
 
         for entry in feed.entries[:10]:
-
-            title = (
-                entry.get(
-                    "title",
-                    ""
-                ).strip()
-            )
-
+            title = entry.get("title", "").strip()
             if title:
                 topics.append(title)
 
     except Exception:
-
-        logger.exception(
-            "ProductHunt fetch failed"
-        )
-
+        logger.exception("ProductHunt fetch failed")
         return []
 
     if not topics:
         return []
 
-    execute_query(
-        "DELETE FROM trends_cache WHERE platform = 'producthunt'"
-    )
+    delete_trends_cache(platform="producthunt")
 
-    for i, title in enumerate(
-        topics[:10]
-    ):
-
-        execute_query(
-            """
-            INSERT INTO trends_cache
-                (
-                    country_code,
-                    platform,
-                    topic,
-                    score
-                )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                "GLOBAL",
-                "producthunt",
-                title,
-                10 - i
-            )
+    for i, title in enumerate(topics[:10]):
+        save_trend(
+            country_code="GLOBAL",
+            platform="producthunt",
+            topic=title,
+            score=10 - i,
         )
 
-    logger.info(
-        "ProductHunt trends fetched"
+    logger.info("ProductHunt trends fetched")
+
+    return get_cached_trends(
+        country_code=None,
+        platform="producthunt",
     )
-
-    return execute_query(
-        """
-        SELECT *
-        FROM trends_cache
-        WHERE platform = 'producthunt'
-        ORDER BY score DESC
-        """,
-        fetch="all"
-    ) or []
-
-
-# ============================================================
-# GITHUB TRENDING
-# ============================================================
 
 async def fetch_github_trending(
     industry: str
 ) -> list:
 
-    cached = execute_query(
-        """
-        SELECT id
-        FROM trends_cache
-        WHERE platform = 'github'
-        AND fetched_at > NOW() - INTERVAL '6 hours'
-        LIMIT 1
-        """,
-        fetch="one"
-    )
-
-    if cached:
-
-        return execute_query(
-            """
-            SELECT *
-            FROM trends_cache
-            WHERE platform = 'github'
-            AND fetched_at > NOW() - INTERVAL '6 hours'
-            ORDER BY score DESC
-            """,
-            fetch="all"
-        ) or []
+    if has_fresh_trends_cache(
+        country_code=None,
+        platform="github",
+        hours=6,
+    ):
+        return get_cached_trends(
+            country_code=None,
+            platform="github",
+            hours=6,
+        )
 
     LANGUAGE_MAP = {
         "tech": "python",
@@ -2068,173 +1656,94 @@ async def fetch_github_trending(
         "mobile": "swift",
     }
 
-    keyword = (
-        industry
-        .split(",")[0]
-        .strip()
-        .lower()
-    )
-
-    language = LANGUAGE_MAP.get(
-        keyword,
-        ""
-    )
-
+    keyword = (industry or "").split(",")[0].strip().lower()
+    language = LANGUAGE_MAP.get(keyword, "")
     topics = []
 
     try:
-
-        url = (
-            f"https://github.com/trending/"
-            f"{language}?since=daily"
-        )
+        url = f"https://github.com/trending/{language}?since=daily"
 
         async with httpx.AsyncClient(
             timeout=15.0,
             headers={
-                "User-Agent":
-                "Mozilla/5.0 "
-                "(compatible; socialdesk/1.0)"
-            }
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; socialdesk/1.0)"
+                )
+            },
         ) as client:
-
             resp = await client.get(url)
 
             if resp.status_code != 200:
-
                 logger.warning(
                     "GitHub trending returned %s",
-                    resp.status_code
+                    resp.status_code,
                 )
-
                 return []
 
             matches = _re.findall(
                 r'href="/([^/"]+/[^/"]+)"[^>]*>\s*\n\s*<span',
-                resp.text
+                resp.text,
             )
 
             seen = set()
+            for repo in matches:
+                if repo in seen:
+                    continue
 
-            for m in matches:
-
-                if m not in seen:
-
-                    seen.add(m)
-                    topics.append(m)
+                seen.add(repo)
+                topics.append(repo)
 
                 if len(topics) >= 10:
                     break
 
     except Exception:
-
-        logger.exception(
-            "GitHub trending fetch failed"
-        )
-
+        logger.exception("GitHub trending fetch failed")
         return []
 
     if not topics:
         return []
 
-    execute_query(
-        "DELETE FROM trends_cache WHERE platform = 'github'"
-    )
+    delete_trends_cache(platform="github")
 
-    for i, repo in enumerate(
-        topics[:10]
-    ):
-
-        execute_query(
-            """
-            INSERT INTO trends_cache
-                (
-                    country_code,
-                    platform,
-                    topic,
-                    score
-                )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                "GLOBAL",
-                "github",
-                repo,
-                10 - i
-            )
+    for i, repo in enumerate(topics[:10]):
+        save_trend(
+            country_code="GLOBAL",
+            platform="github",
+            topic=repo,
+            score=10 - i,
         )
 
-    logger.info(
-        "GitHub trending fetched"
+    logger.info("GitHub trending fetched")
+
+    return get_cached_trends(
+        country_code=None,
+        platform="github",
     )
-
-    return execute_query(
-        """
-        SELECT *
-        FROM trends_cache
-        WHERE platform = 'github'
-        ORDER BY score DESC
-        """,
-        fetch="all"
-    ) or []
-
-
-# ============================================================
-# RECOMMENDATION PIPELINE
-# ============================================================
 
 async def run_recommendation_pipeline(
     user_id: int
 ) -> list:
 
-    profile = execute_query(
-        "SELECT * FROM user_profiles WHERE user_id = %s",
-        (user_id,),
-        fetch="one"
-    )
+    profile = get_user_profile(user_id)
 
     if not profile:
-
         logger.warning(
             "No profile for user %s, skipping",
-            user_id
+            user_id,
         )
-
         return []
 
-    country_code = profile.get(
-        "country_code",
-        "IN"
-    )
+    country_code = profile.get("country_code", "IN")
+    industry = profile.get("industry", "business")
 
-    industry = profile.get(
-        "industry",
-        "business"
-    )
-
-    connected = execute_query(
-        """
-        SELECT platform
-        FROM social_accounts
-        WHERE user_id = %s
-        """,
-        (user_id,),
-        fetch="all"
-    )
-
-    platforms = (
-        [
-            r["platform"]
-            for r in connected
-        ]
-        if connected
-        else ["linkedin"]
-    )
+    platforms = get_connected_platforms(user_id)
+    if not platforms:
+        platforms = ["linkedin"]
 
     logger.info(
         "Platforms configured for user %s: %s",
         user_id,
-        platforms
+        platforms,
     )
 
     (
@@ -2243,23 +1752,18 @@ async def run_recommendation_pipeline(
         reddit_trends,
         hn_trends,
         ph_trends,
-        gh_trends
+        gh_trends,
     ) = await asyncio.gather(
         fetch_holidays(country_code),
         asyncio.to_thread(
             fetch_google_trends,
             country_code,
-            industry
-        ),
-        fetch_reddit_trends(
             industry,
-            country_code
         ),
+        fetch_reddit_trends(industry, country_code),
         fetch_hackernews_trends(),
         fetch_producthunt_trends(),
-        fetch_github_trending(
-            industry
-        ),
+        fetch_github_trending(industry),
     )
 
     all_trends = (
@@ -2273,46 +1777,21 @@ async def run_recommendation_pipeline(
     relevant = filter_relevant_events(
         events,
         all_trends,
-        profile
+        profile,
     )
 
     generated_posts = []
     days_offset = 0
 
-    # --------------------------------------------------------
-    # EVENTS
-    # --------------------------------------------------------
-
-    for event in relevant.get(
-        "relevant_events",
-        []
-    ):
-
-        already_exists = execute_query(
-            """
-            SELECT sp.id
-            FROM scheduled_posts sp
-            JOIN post_templates pt
-                ON sp.template_id = pt.id
-            WHERE pt.user_id = %s
-            AND pt.content_text ILIKE %s
-            AND sp.created_at::date = CURRENT_DATE
-            LIMIT 1
-            """,
-            (
-                user_id,
-                f"%{event['event_name'][:20]}%"
-            ),
-            fetch="one"
-        )
-
-        if already_exists:
-
+    for event in relevant.get("relevant_events", []):
+        if has_duplicate_post_for_trigger(
+            user_id=user_id,
+            trigger_name=event["event_name"],
+        ):
             logger.info(
                 "Skipping duplicate event post: %s",
-                event["event_name"]
+                event["event_name"],
             )
-
             continue
 
         primary_platform = (
@@ -2326,143 +1805,83 @@ async def run_recommendation_pipeline(
             trigger={
                 "type": "event",
                 "name": event["event_name"],
-                "angle": event["angle"]
+                "angle": event["angle"],
             },
-            platform=primary_platform
+            platform=primary_platform,
         )
 
         if not content.get("caption"):
             continue
 
         media_url = await generate_media_url(
-            content.get(
-                "image_prompt",
-                ""
-            ),
-            profile
+            content.get("image_prompt", ""),
+            profile,
         )
 
-        post_platforms = list(
-            platforms
-        )
+        post_platforms = list(platforms)
 
-        if (
-            not media_url
-            and "instagram" in post_platforms
-        ):
-
+        if not media_url and "instagram" in post_platforms:
             logger.info(
-                "No image generated; "
-                "dropping Instagram for event post: %s",
-                event["event_name"]
+                "No image generated; dropping Instagram for event post: %s",
+                event["event_name"],
             )
-
             post_platforms = [
-                p
-                for p in post_platforms
-                if p != "instagram"
+                platform
+                for platform in post_platforms
+                if platform != "instagram"
             ]
 
         try:
-
             event_date = datetime.strptime(
-                event["event_date"],
-                "%Y-%m-%d"
+                str(event["event_date"]),
+                "%Y-%m-%d",
             )
-
-            scheduled_at = (
-                event_date
-                - timedelta(days=3)
-            )
-
+            scheduled_at = event_date - timedelta(days=3)
             scheduled_at = scheduled_at.replace(
                 hour=9,
                 minute=0,
                 second=0,
-                tzinfo=timezone.utc
+                tzinfo=timezone.utc,
             )
 
-            if scheduled_at < datetime.now(
-                timezone.utc
-            ):
-
+            if scheduled_at < datetime.now(timezone.utc):
                 scheduled_at = (
-                    datetime.now(
-                        timezone.utc
-                    )
+                    datetime.now(timezone.utc)
                     + timedelta(days=1)
-                )
-
-                scheduled_at = scheduled_at.replace(
+                ).replace(
                     hour=9,
                     minute=0,
-                    second=0
+                    second=0,
                 )
 
         except Exception:
-
             scheduled_at = (
-                datetime.now(
-                    timezone.utc
-                )
-                + timedelta(
-                    days=days_offset + 1
-                )
+                datetime.now(timezone.utc)
+                + timedelta(days=days_offset + 1)
             )
 
         generated_posts.append(
             {
-                "content_text":
-                    content["caption"],
-                "platforms":
-                    post_platforms,
-                "scheduled_at":
-                    scheduled_at,
-                "trigger_type":
-                    "event",
-                "trigger_name":
-                    event["event_name"],
-                "media_url":
-                    media_url
+                "content_text": content["caption"],
+                "platforms": post_platforms,
+                "scheduled_at": scheduled_at,
+                "trigger_type": "event",
+                "trigger_name": event["event_name"],
+                "media_url": media_url,
             }
         )
 
         days_offset += 2
 
-    # --------------------------------------------------------
-    # TRENDS
-    # --------------------------------------------------------
-
-    for trend in relevant.get(
-        "relevant_trends",
-        []
-    ):
-
-        already_exists = execute_query(
-            """
-            SELECT sp.id
-            FROM scheduled_posts sp
-            JOIN post_templates pt
-                ON sp.template_id = pt.id
-            WHERE pt.user_id = %s
-            AND pt.content_text ILIKE %s
-            AND sp.created_at::date = CURRENT_DATE
-            LIMIT 1
-            """,
-            (
-                user_id,
-                f"%{trend['topic'][:20]}%"
-            ),
-            fetch="one"
-        )
-
-        if already_exists:
-
+    for trend in relevant.get("relevant_trends", []):
+        if has_duplicate_post_for_trigger(
+            user_id=user_id,
+            trigger_name=trend["topic"],
+        ):
             logger.info(
                 "Skipping duplicate trend post: %s",
-                trend["topic"]
+                trend["topic"],
             )
-
             continue
 
         primary_platform = (
@@ -2476,72 +1895,49 @@ async def run_recommendation_pipeline(
             trigger={
                 "type": "trend",
                 "name": trend["topic"],
-                "angle": trend["angle"]
+                "angle": trend["angle"],
             },
-            platform=primary_platform
+            platform=primary_platform,
         )
 
         if not content.get("caption"):
             continue
 
         media_url = await generate_media_url(
-            content.get(
-                "image_prompt",
-                ""
-            ),
-            profile
+            content.get("image_prompt", ""),
+            profile,
         )
 
-        post_platforms = list(
-            platforms
-        )
+        post_platforms = list(platforms)
 
-        if (
-            not media_url
-            and "instagram" in post_platforms
-        ):
-
+        if not media_url and "instagram" in post_platforms:
             logger.info(
-                "No image generated; "
-                "dropping Instagram for trend post: %s",
-                trend["topic"]
+                "No image generated; dropping Instagram for trend post: %s",
+                trend["topic"],
             )
-
             post_platforms = [
-                p
-                for p in post_platforms
-                if p != "instagram"
+                platform
+                for platform in post_platforms
+                if platform != "instagram"
             ]
 
         scheduled_at = (
-            datetime.now(
-                timezone.utc
-            )
-            + timedelta(
-                days=days_offset + 1
-            )
-        )
-
-        scheduled_at = scheduled_at.replace(
+            datetime.now(timezone.utc)
+            + timedelta(days=days_offset + 1)
+        ).replace(
             hour=9,
             minute=0,
-            second=0
+            second=0,
         )
 
         generated_posts.append(
             {
-                "content_text":
-                    content["caption"],
-                "platforms":
-                    post_platforms,
-                "scheduled_at":
-                    scheduled_at,
-                "trigger_type":
-                    "trend",
-                "trigger_name":
-                    trend["topic"],
-                "media_url":
-                    media_url
+                "content_text": content["caption"],
+                "platforms": post_platforms,
+                "scheduled_at": scheduled_at,
+                "trigger_type": "trend",
+                "trigger_name": trend["topic"],
+                "media_url": media_url,
             }
         )
 
@@ -2550,11 +1946,10 @@ async def run_recommendation_pipeline(
     logger.info(
         "Generated %s posts for user %s",
         len(generated_posts),
-        user_id
+        user_id,
     )
 
     return generated_posts
-
 
 def run_recommendation_pipeline_sync(
     user_id: int

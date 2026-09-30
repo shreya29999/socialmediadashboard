@@ -13,13 +13,21 @@ from app.core.config import (
 )
 from app.core.helpers import normalize_email
 from app.core.utils import create_access_token, hash_password, verify_password
-from app.db.database import (
+from app.repositories.user_repository import (
     create_user,
     get_admins,
-    get_social_account,
     get_user_by_email,
     get_user_by_id,
+    update_last_login,
+)
+from app.repositories.social_account_repository import (
+    get_social_account,
     save_social_account,
+)
+from app.repositories.user_repository import (
+    create_user,
+    get_user_by_email,
+    get_user_by_id,
     update_last_login,
 )
 from app.integrations.admin_utils import resolve_admin_for_signup

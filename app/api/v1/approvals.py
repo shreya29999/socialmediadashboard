@@ -6,14 +6,16 @@ from app.api.dependencies import (
     require_owning_admin,
 )
 from app.core.utils import verify_confirmation_token
-from app.db.database import (
+from app.repositories.post_repository import (
+    get_post_by_id,
+    mark_token_used,
+)
+from app.repositories.approval_repository import (
     admin_final_approve,
     admin_final_reject,
-    execute_query,
-    get_post_by_id,
-    get_posts_awaiting_admin_approval,
     update_hr_approval,
 )
+
 from app.schemas.auth import RejectRequest
 from app.workers.tasks import _escalate_to_admin
 
@@ -31,7 +33,7 @@ def hr_approve(post_id: int, token: str = Query(...)):
         raise HTTPException(status_code=400, detail="Invalid or expired token")
     if post["token_used"]:
         raise HTTPException(status_code=400, detail="Token already used")
-    execute_query("UPDATE scheduled_posts SET token_used = TRUE WHERE id = %s", (post_id,))
+    mark_token_used(post_id)
     update_hr_approval(post_id, "approved")
     _escalate_to_admin(post_id, hr_status="approved")
     return {"message": "HR approved ✅ Post sent to Admin for final review.", "post_id": post_id}
@@ -48,7 +50,7 @@ def hr_reject(post_id: int, req: RejectRequest):
         raise HTTPException(status_code=400, detail="Invalid token")
     if post["token_used"]:
         raise HTTPException(status_code=400, detail="Token already used")
-    execute_query("UPDATE scheduled_posts SET token_used = TRUE WHERE id = %s", (post_id,))
+    mark_token_used(post_id)
     update_hr_approval(post_id, "rejected", req.reason)
     _escalate_to_admin(post_id, hr_status="rejected", hr_reason=req.reason)
     return {"message": "HR rejected. Escalated to Admin for final decision.", "post_id": post_id}

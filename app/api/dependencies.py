@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.utils import verify_access_token
-from app.db.database import get_user_by_id
+from app.repositories.user_repository import get_user_by_id
 
 
 security = HTTPBearer()

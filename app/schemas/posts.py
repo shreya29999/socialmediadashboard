@@ -1,6 +1,7 @@
 from enum import Enum
 from typing import Optional, List
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 class RecurrenceType(str, Enum):
     ONE_TIME      = "ONE_TIME"
@@ -27,3 +28,42 @@ class UpdatePostRequest(BaseModel):
     media_url    : Optional[str] = None
     platforms    : Optional[List[Platform]] = None
     scheduled_at : Optional[str] = None
+
+class GeneratePostRequest(BaseModel):
+    """
+    Request Schemas for AI-Based social Media Post
+    """
+    title: str = Field(
+        ...,
+        min_length=3,
+        max_length=500,
+        description="Topic or title for the AI-generated social media post.",
+    )
+
+    platform: Platform = Field(
+        default=Platform.linkedin,
+        description="Social media platform for the generated post.",
+    )
+    generate_image: bool = Field(
+        default=True,
+        description="Whether to generate an AI image for the post.",
+    )
+    # scheduled_at: Optional[str] = Field(
+    #     default=None,
+    #     description="Optional scheduled publication time.",
+    # )  
+    scheduled_at: Optional[datetime] = None
+
+
+class GeneratedPostResponse(BaseModel):
+    """
+    Response Schemas for the AI-Generated social media content
+    """
+    post_id: int
+    title: str
+    platform: Platform
+    caption: str
+    image_prompt: str
+    image_url: Optional[str] = None
+    status: str = "generated"
+    scheduled_at: Optional[str] = None

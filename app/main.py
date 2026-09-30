@@ -16,7 +16,7 @@ from app.api.v1.superadmin import router as superadmin_router
 from app.api.v1.users import router as users_router
 from app.core.config import ALLOWED_ORIGINS, configure_cloudinary
 from app.core.logging import logger
-from app.db.database import init_db
+
 
 
 configure_cloudinary()
@@ -37,9 +37,7 @@ app.add_middleware(
 
 @app.on_event("startup")
 async def startup():
-    init_db()
-    logger.info("App started, DB ready")
-
+    logger.info("App started")
 
 @app.on_event("shutdown")
 async def shutdown():
