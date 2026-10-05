@@ -639,92 +639,273 @@ def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dic
 def _publish_to_linkedin(post: dict, access_token: str) -> dict:
     import httpx
 
-    account = get_social_account(post["user_id"], "linkedin")
+    account = get_social_account(
+        post["user_id"],
+        "linkedin",
+    )
+
     if not account:
-        return {"success": False, "error": "LinkedIn account not connected"}
+        return {
+            "success": False,
+            "error": "LinkedIn account not connected",
+        }
 
     user_urn = account["page_id"]
     media_url = post.get("media_url")
-    is_video  = _is_video_url(media_url)
+    is_video = _is_video_url(media_url)
+
+    linkedin_version = "202609"
+
     headers = {
-        "Authorization"             : f"Bearer {access_token}",
-        "Content-Type"              : "application/json",
-        "X-Restli-Protocol-Version" : "2.0.0"
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "Linkedin-Version": linkedin_version,
+        "X-Restli-Protocol-Version": "2.0.0",
     }
+
+    # ---------------------------------------------------------
+    # VIDEO
+    # ---------------------------------------------------------
+    #
+    # Keep the existing video upload temporarily.
+    # We will migrate LinkedIn video separately after image
+    # publishing is confirmed working.
+    #
     if media_url and is_video:
         logger.info("LinkedIn: uploading video...")
-        upload_result = _upload_linkedin_video(media_url, access_token, user_urn)
+
+        upload_result = _upload_linkedin_video(
+            media_url,
+            access_token,
+            user_urn,
+        )
+
         if not upload_result["success"]:
             return upload_result
+
+        logger.warning(
+            "LinkedIn video publishing still uses the legacy "
+            "video upload flow. Image/text publishing uses the "
+            "current Posts API."
+        )
+
         specific_content = {
             "com.linkedin.ugc.ShareContent": {
-                "shareCommentary"   : {"text": post["content_text"]},
+                "shareCommentary": {
+                    "text": post["content_text"]
+                },
                 "shareMediaCategory": "VIDEO",
                 "media": [
                     {
-                        "status"     : "READY",
-                        "media"      : upload_result["asset"],
-                        "title"      : {"text": "Video"},
-                        "description": {"text": post["content_text"]}
+                        "status": "READY",
+                        "media": upload_result["asset"],
+                        "title": {
+                            "text": "Video"
+                        },
+                        "description": {
+                            "text": post["content_text"]
+                        },
                     }
-                ]
+                ],
             }
         }
-    elif media_url:
-        logger.info("LinkedIn: uploading image...")
-        upload_result = _upload_linkedin_image(media_url, access_token, user_urn)
+
+        legacy_payload = {
+            "author": user_urn,
+            "lifecycleState": "PUBLISHED",
+            "specificContent": specific_content,
+            "visibility": {
+                "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+            },
+        }
+
+        try:
+            response = httpx.post(
+                "https://api.linkedin.com/v2/ugcPosts",
+                json=legacy_payload,
+                headers=headers,
+                timeout=30.0,
+            )
+
+            if response.status_code == 201:
+                return {
+                    "success": True,
+                    "post_id": response.headers.get(
+                        "x-restli-id"
+                    ),
+                }
+
+            logger.error(
+                "LinkedIn video post failed | status=%s | response=%s",
+                response.status_code,
+                response.text,
+            )
+
+            try:
+                error_data = response.json()
+            except Exception:
+                error_data = {}
+
+            return {
+                "success": False,
+                "error": error_data.get(
+                    "message",
+                    "LinkedIn video post failed",
+                ),
+            }
+
+        except httpx.TimeoutException:
+            return {
+                "success": False,
+                "error": "LinkedIn video API timed out",
+            }
+
+        except Exception as exc:
+            logger.exception(
+                "LinkedIn video publishing failed"
+            )
+
+            return {
+                "success": False,
+                "error": str(exc),
+            }
+
+    # ---------------------------------------------------------
+    # IMAGE
+    # ---------------------------------------------------------
+
+    if media_url:
+        logger.info(
+            "LinkedIn: uploading image using Images API..."
+        )
+
+        upload_result = _upload_linkedin_image(
+            media_url,
+            access_token,
+            user_urn,
+        )
+
         if not upload_result["success"]:
             return upload_result
-        specific_content = {
-            "com.linkedin.ugc.ShareContent": {
-                "shareCommentary"   : {"text": post["content_text"]},
-                "shareMediaCategory": "IMAGE",
-                "media": [
-                    {
-                        "status"     : "READY",
-                        "media"      : upload_result["asset"],
-                        "title"      : {"text": "Image"},
-                        "description": {"text": post["content_text"]}
-                    }
-                ]
-            }
+
+        image_urn = upload_result["asset"]
+
+        logger.info(
+            "LinkedIn image uploaded | image_urn=%s",
+            image_urn,
+        )
+
+        payload = {
+            "author": user_urn,
+            "commentary": post["content_text"],
+            "visibility": "PUBLIC",
+            "distribution": {
+                "feedDistribution": "MAIN_FEED",
+                "targetEntities": [],
+                "thirdPartyDistributionChannels": [],
+            },
+            "content": {
+                "media": {
+                    "altText": post["content_text"][:4000],
+                    "id": image_urn,
+                }
+            },
+            "lifecycleState": "PUBLISHED",
+            "isReshareDisabledByAuthor": False,
         }
+
+    # ---------------------------------------------------------
+    # TEXT ONLY
+    # ---------------------------------------------------------
+
     else:
-        logger.info("LinkedIn: posting text only...")
-        specific_content = {
-            "com.linkedin.ugc.ShareContent": {
-                "shareCommentary"   : {"text": post["content_text"]},
-                "shareMediaCategory": "NONE"
-            }
+        logger.info(
+            "LinkedIn: posting text using Posts API..."
+        )
+
+        payload = {
+            "author": user_urn,
+            "commentary": post["content_text"],
+            "visibility": "PUBLIC",
+            "distribution": {
+                "feedDistribution": "MAIN_FEED",
+                "targetEntities": [],
+                "thirdPartyDistributionChannels": [],
+            },
+            "lifecycleState": "PUBLISHED",
+            "isReshareDisabledByAuthor": False,
         }
-    payload = {
-        "author"         : user_urn,
-        "lifecycleState" : "PUBLISHED",
-        "specificContent": specific_content,
-        "visibility"     : {
-            "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-        }
-    }
+
+    # ---------------------------------------------------------
+    # CREATE LINKEDIN POST
+    # ---------------------------------------------------------
+
     try:
         response = httpx.post(
-            "https://api.linkedin.com/v2/ugcPosts",
+            "https://api.linkedin.com/rest/posts",
             json=payload,
             headers=headers,
-            timeout=30.0
+            timeout=30.0,
         )
+
+        logger.info(
+            "LinkedIn Posts API response | status=%s",
+            response.status_code,
+        )
+
         if response.status_code == 201:
-            return {"success": True, "post_id": response.headers.get("x-restli-id")}
-        logger.error("LinkedIn ugcPosts failed: %s %s", response.status_code, response.text)
+            post_id = response.headers.get(
+                "x-restli-id"
+            )
+
+            logger.info(
+                "LinkedIn post published successfully | post_id=%s",
+                post_id,
+            )
+
+            return {
+                "success": True,
+                "post_id": post_id,
+            }
+
+        logger.error(
+            "LinkedIn Posts API failed | status=%s | response=%s",
+            response.status_code,
+            response.text,
+        )
+
+        try:
+            error_data = response.json()
+        except Exception:
+            error_data = {}
+
         return {
             "success": False,
-            "error"  : response.json().get("message", "LinkedIn post failed")
+            "error": error_data.get(
+                "message",
+                "LinkedIn post creation failed",
+            ),
         }
-    except httpx.TimeoutException:
-        return {"success": False, "error": "LinkedIn API timed out"}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-    
 
+    except httpx.TimeoutException:
+        logger.error(
+            "LinkedIn Posts API timed out"
+        )
+
+        return {
+            "success": False,
+            "error": "LinkedIn Posts API timed out",
+        }
+
+    except Exception as exc:
+        logger.exception(
+            "LinkedIn post publishing failed"
+        )
+
+        return {
+            "success": False,
+            "error": str(exc),
+        }
 def _generate_next_occurrence(post: dict):
     try:
         template = get_template_by_id(post["template_id"])

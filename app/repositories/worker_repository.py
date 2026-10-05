@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import aliased
-
+from datetime import datetime, timezone, timedelta
 from app.db.models import (
     PostApprovalStage,
     PostTarget,
@@ -40,13 +40,10 @@ def _post_dict(post, template):
 
 def get_posts_due_for_confirmation():
     """
-    Get scheduled posts that are within the 30-minute
-    confirmation window and belong to users with admins.
+    Get scheduled posts that have not yet received
+    an HR approval request.
     """
     with SessionLocal() as db:
-        now = datetime.now(timezone.utc)
-        confirmation_window = now + timedelta(minutes=30)
-
         stmt = (
             select(ScheduledPost, PostTemplate)
             .join(
@@ -61,8 +58,7 @@ def get_posts_due_for_confirmation():
                 ScheduledPost.status == "scheduled",
                 PostTemplate.status == "active",
                 User.admin_id.is_not(None),
-                ScheduledPost.scheduled_at <= confirmation_window,
-                ScheduledPost.scheduled_at > now,
+                ScheduledPost.confirmation_sent_at.is_(None),
             )
         )
 
@@ -73,32 +69,23 @@ def get_posts_due_for_confirmation():
             for post, template in rows
         ]
 
-
 def get_expired_awaiting_posts():
-    """
-    Get posts that reached their scheduled time while
-    still waiting for HR/Admin approval.
-    """
     with SessionLocal() as db:
         now = datetime.now(timezone.utc)
+
+        # Post expires 30 minutes after its scheduled time
+        expiration_time = now - timedelta(minutes=30)
 
         stmt = select(ScheduledPost).where(
             ScheduledPost.status.in_(
                 ["awaiting_hr_approval", "awaiting_admin_approval"]
             ),
-            ScheduledPost.scheduled_at <= now,
+            ScheduledPost.scheduled_at <= expiration_time,
         )
 
         posts = db.execute(stmt).scalars().all()
 
-        return [
-            {
-                "id": post.id,
-                "scheduled_at": post.scheduled_at,
-                "status": post.status,
-            }
-            for post in posts
-        ]
+        return posts
 
 
 def get_post_by_id(post_id: int):
@@ -124,7 +111,7 @@ def get_post_by_id(post_id: int):
 def get_posts_ready_to_publish():
     """
     Get posts whose scheduled time has arrived and which
-    are approved or don't require admin approval.
+    have been explicitly approved.
     """
     with SessionLocal() as db:
         now = datetime.now(timezone.utc)
@@ -135,20 +122,10 @@ def get_posts_ready_to_publish():
                 PostTemplate,
                 ScheduledPost.template_id == PostTemplate.id,
             )
-            .join(
-                User,
-                PostTemplate.user_id == User.id,
-            )
             .where(
                 PostTemplate.status == "active",
                 ScheduledPost.scheduled_at <= now,
-                (
-                    (ScheduledPost.status == "approved")
-                    | (
-                        (ScheduledPost.status == "scheduled")
-                        & User.admin_id.is_(None)
-                    )
-                ),
+                ScheduledPost.status == "approved",
             )
         )
 
@@ -158,7 +135,6 @@ def get_posts_ready_to_publish():
             _post_dict(post, template)
             for post, template in rows
         ]
-
 
 def update_post_status(post_id: int, status: str):
     with SessionLocal() as db:

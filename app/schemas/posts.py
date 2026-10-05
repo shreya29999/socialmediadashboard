@@ -48,11 +48,9 @@ class GeneratePostRequest(BaseModel):
         default=True,
         description="Whether to generate an AI image for the post.",
     )
-    # scheduled_at: Optional[str] = Field(
-    #     default=None,
-    #     description="Optional scheduled publication time.",
-    # )  
-    scheduled_at: Optional[datetime] = None
+    scheduled_at: datetime
+
+    
 
 
 class GeneratedPostResponse(BaseModel):

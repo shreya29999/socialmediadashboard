@@ -10,16 +10,11 @@ from app.core.config import (
     META_APP_ID,
     META_APP_SECRET,
     META_REDIRECT_URI,
+    META_LOGIN_CONFIG_ID,
 )
 from app.core.helpers import normalize_email
 from app.core.utils import create_access_token, hash_password, verify_password
-from app.repositories.user_repository import (
-    create_user,
-    get_admins,
-    get_user_by_email,
-    get_user_by_id,
-    update_last_login,
-)
+
 from app.repositories.social_account_repository import (
     get_social_account,
     save_social_account,
@@ -29,8 +24,10 @@ from app.repositories.user_repository import (
     get_user_by_email,
     get_user_by_id,
     update_last_login,
+    get_admins,
 )
 from app.integrations.admin_utils import resolve_admin_for_signup
+
 from app.schemas.auth import LoginRequest, RegisterRequest
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -92,33 +89,37 @@ def get_me(current_user: dict = Depends(get_current_user)):
 
 @router.get("/facebook/connect")
 def facebook_connect(current_user: dict = Depends(get_current_user)):
-    user_id  = current_user["user_id"]
+    user_id = current_user["user_id"]
+
     existing = get_social_account(user_id, "facebook")
+
     if existing:
         return {
             "already_connected": True,
-            "message"          : "Facebook already connected ✅",
-            "page_id"          : existing["page_id"]
+            "message": "Facebook already connected ✅",
+            "page_id": existing["page_id"],
         }
+
     url = (
-        f"https://www.facebook.com/v18.0/dialog/oauth"
+        "https://www.facebook.com/v26.0/dialog/oauth"
         f"?client_id={META_APP_ID}"
         f"&redirect_uri={META_REDIRECT_URI}"
-        f"&scope=pages_manage_posts,pages_read_engagement,"
-        f"pages_show_list,instagram_basic,"
-        f"instagram_content_publish,business_management"
+        f"&config_id={META_LOGIN_CONFIG_ID}"
+        f"&state={user_id}"
         f"&response_type=code"
-        f"&state={current_user['user_id']}"
     )
-    return {"already_connected": False, "oauth_url": url}
 
+    return {
+        "already_connected": False,
+        "oauth_url": url,
+    }
 
 @router.get("/facebook/callback")
 async def facebook_callback(code: str = Query(...), state: str = Query(...)):
     user_id = int(state)
     async with httpx.AsyncClient() as client:
         token_response = await client.get(
-            "https://graph.facebook.com/v18.0/oauth/access_token",
+            "https://graph.facebook.com/v26.0/oauth/access_token",
             params={
                 "client_id"     : META_APP_ID,
                 "client_secret" : META_APP_SECRET,
@@ -131,7 +132,7 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
         if not short_lived_token:
             raise HTTPException(status_code=400, detail=f"Facebook token error: {token_data}")
         long_response    = await client.get(
-            "https://graph.facebook.com/v18.0/oauth/access_token",
+            "https://graph.facebook.com/v26.0/oauth/access_token",
             params={
                 "grant_type"        : "fb_exchange_token",
                 "client_id"         : META_APP_ID,
@@ -145,7 +146,7 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
         from datetime import timedelta
         expires_at     = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
         pages_response = await client.get(
-            "https://graph.facebook.com/v18.0/me/accounts",
+            "https://graph.facebook.com/v26.0/me/accounts",
             params={
                 "access_token" : long_lived_token,
                 "fields"       : "id,name,access_token,instagram_business_account",
@@ -162,19 +163,19 @@ async def facebook_callback(code: str = Query(...), state: str = Query(...)):
             page_name  = page.get("name")
             page_token = page.get("access_token", long_lived_token)
             ig_resp    = await client.get(
-                f"https://graph.facebook.com/v18.0/{page_id}",
+                f"https://graph.facebook.com/v26.0/{page_id}",
                 params={"fields": "instagram_business_account", "access_token": page_token}
             )
             ig_account = ig_resp.json().get("instagram_business_account")
             if ig_account:
                 ig_detail_resp = await client.get(
-                    f"https://graph.facebook.com/v18.0/{ig_account['id']}",
+                    f"https://graph.facebook.com/v26.0/{ig_account['id']}",
                     params={"fields": "username", "access_token": page_token}
                 )
                 ig_username = ig_detail_resp.json().get("username")
         else:
             me_data    = (await client.get(
-                "https://graph.facebook.com/v18.0/me",
+                "https://graph.facebook.com/v26.0/me",
                 params={"access_token": long_lived_token, "fields": "id,name"}
             )).json()
             page_id    = me_data.get("id")
@@ -209,7 +210,8 @@ def linkedin_connect(current_user: dict = Depends(get_current_user)):
         f"https://www.linkedin.com/oauth/v2/authorization"
         f"?response_type=code&client_id={LINKEDIN_CLIENT_ID}"
         f"&redirect_uri={LINKEDIN_REDIRECT_URI}"
-        f"&scope=openid profile email w_member_social"
+        # f"&scope=openid profile email w_member_social"
+        f"&scope=openid profile email"
         f"&state={current_user['user_id']}"
     )
     return {"already_connected": False, "oauth_url": url}

@@ -19,3 +19,4 @@ groq
 feedparser
 httpx
 openai
+opencv-python==5.0.0.93

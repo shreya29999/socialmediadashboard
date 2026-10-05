@@ -1,4 +1,6 @@
 import asyncio
+import numpy as np
+import cv2
 import httpx
 import os
 import re
@@ -45,7 +47,724 @@ from app.ai.llm import generate_llm_response, AI_PROVIDER
 CALENDARIFIC_API_KEY = os.getenv("CALENDARIFIC_API_KEY")
 POLLINATIONS_API_KEY = os.getenv("POLLINATIONS_API_KEY")
 
+#Open CV 
 
+
+def prepare_logo_with_opencv(logo_bytes: bytes) -> np.ndarray | None:
+    """
+    Remove the white background from a logo image and crop
+    the result to the actual logo content.
+    """
+
+    logo_array = np.frombuffer(logo_bytes, dtype=np.uint8)
+
+    logo = cv2.imdecode(
+        logo_array,
+        cv2.IMREAD_UNCHANGED,
+    )
+
+    if logo is None:
+        logger.error("Unable to decode company logo")
+        return None
+
+    # If logo already has alpha, use it directly.
+    if logo.ndim == 3 and logo.shape[2] == 4:
+        return logo
+
+    # Convert to BGR if necessary.
+    logo = logo[:, :, :3]
+
+    # Calculate distance from white.
+    # White pixels have all channels close to 255.
+    min_channel = np.min(
+        logo,
+        axis=2,
+    ).astype(np.float32)
+
+    alpha = 1.0 - (
+        min_channel / 255.0
+    )
+
+    # Remove almost-white pixels.
+    alpha[alpha < 0.10] = 0.0
+
+    # Keep actual logo pixels.
+    alpha[alpha >= 0.10] = 1.0
+
+    # Smooth the boundary.
+    alpha = cv2.GaussianBlur(
+        alpha,
+        (5, 5),
+        0,
+    )
+
+    # Find the actual logo area.
+    mask = (
+        alpha > 0.08
+    ).astype(np.uint8) * 255
+
+    contours, _ = cv2.findContours(
+        mask,
+        cv2.RETR_EXTERNAL,
+        cv2.CHAIN_APPROX_SIMPLE,
+    )
+
+    if not contours:
+        logger.warning(
+            "No visible logo content detected"
+        )
+        return None
+
+    x, y, w, h = cv2.boundingRect(
+        np.vstack(contours)
+    )
+
+    # Small padding around the actual logo.
+    padding = 5
+
+    x1 = max(0, x - padding)
+    y1 = max(0, y - padding)
+    x2 = min(logo.shape[1], x + w + padding)
+    y2 = min(logo.shape[0], y + h + padding)
+
+    logo = logo[y1:y2, x1:x2]
+    alpha = alpha[y1:y2, x1:x2]
+
+    alpha = (
+        alpha * 255
+    ).astype(np.uint8)
+
+    # Create RGBA logo.
+    logo_rgba = cv2.cvtColor(
+        logo,
+        cv2.COLOR_BGR2BGRA,
+    )
+
+    logo_rgba[:, :, 3] = alpha
+
+    return logo_rgba
+
+
+async def apply_logo_with_opencv(
+    image_bytes: bytes,
+    logo_url: str | None,
+) -> bytes|None:
+    if not image_bytes:
+        return None
+
+    if not logo_url:
+        logger.info("No company logo configured; returning original image")
+        return image_bytes
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(logo_url)
+            response.raise_for_status()
+
+        base_array = np.frombuffer(image_bytes, dtype=np.uint8)
+        logo_array = np.frombuffer(response.content, dtype=np.uint8)
+
+        base_image = cv2.imdecode(
+            base_array,
+            cv2.IMREAD_COLOR,
+        )
+
+        logo_image = cv2.imdecode(
+            logo_array,
+            cv2.IMREAD_UNCHANGED,
+        )
+
+        if base_image is None:
+            logger.error("Unable to decode generated image with OpenCV")
+            return image_bytes
+
+        if logo_image is None:
+            logger.error("Unable to decode company logo with OpenCV")
+            return image_bytes
+
+        base_height, base_width = base_image.shape[:2]
+
+        target_logo_width = max(
+            1,
+            base_width // 6,
+        )
+
+        logo_height, logo_width = logo_image.shape[:2]
+
+        scale = target_logo_width / logo_width
+
+        target_logo_height = max(
+            1,
+            int(logo_height * scale),
+        )
+
+        logo_image = cv2.resize(
+            logo_image,
+            (target_logo_width, target_logo_height),
+            interpolation=cv2.INTER_AREA,
+        )
+
+
+        margin = 40
+        x1 = margin
+        y1 = margin
+
+
+
+        x2 = x1 + target_logo_width
+        y2 = y1 + target_logo_height
+
+        if x1 < 0 or y1 < 0:
+            logger.warning(
+                "Company logo is too large for generated image"
+            )
+            return image_bytes
+
+        roi = base_image[y1:y2, x1:x2]
+
+        if logo_image.shape[2] == 4:
+        
+            logo_rgb = logo_image[:, :, :3]
+
+            alpha = logo_image[:, :, 3].astype(np.float32) / 255.0
+
+        else:
+
+            logo_rgb = logo_image[:, :, :3]
+            min_channel = np.min(logo_rgb, axis=2).astype(np.float32)
+            alpha = (255.0 - min_channel) / 255.0
+            alpha[alpha < 0.08] = 0.0
+            alpha[alpha > 0.35] = 1.0
+            alpha = cv2.GaussianBlur(
+                alpha,
+                (5, 5),
+                0,
+            )
+
+        alpha = alpha[:, :, np.newaxis]
+
+        blended = (
+            logo_rgb.astype(np.float32) * alpha
+            + roi.astype(np.float32) * (1.0 - alpha)
+        )
+
+        base_image[y1:y2, x1:x2] = np.clip(
+            blended,
+            0,
+            255,
+        ).astype(np.uint8)
+
+        success, encoded_image = cv2.imencode(
+            ".jpg",
+            base_image,
+            [cv2.IMWRITE_JPEG_QUALITY, 95],
+        )
+
+        if not success:
+            logger.error("Failed to encode branded image")
+            return image_bytes
+
+        logger.info(
+            "Company logo successfully applied to generated image"
+        )
+
+        return encoded_image.tobytes()
+
+    except Exception:
+        logger.exception(
+            "Failed to apply company logo with OpenCV"
+        )
+        return image_bytes
+
+async def apply_overlay_text_with_opencv(
+    image_bytes: bytes,
+    overlay_text: str | None,
+    overlay_position: str,
+    overlay_text_size: int = 48,
+) -> bytes | None:
+    if not image_bytes:
+        return None
+
+    if not overlay_text or not overlay_text.strip():
+        logger.info(
+            "No custom overlay text configured; returning original image"
+        )
+        return image_bytes
+
+    allowed_positions = {
+        "top-left",
+        "top-center",
+        "top-right",
+        "center-left",
+        "center",
+        "center-right",
+        "bottom-left",
+        "bottom-center",
+        "bottom-right",
+    }
+
+    if overlay_position not in allowed_positions:
+        logger.warning(
+            "Invalid overlay position '%s'; using bottom-center",
+            overlay_position,
+        )
+        overlay_position = "bottom-center"
+
+    try:
+        image_array = np.frombuffer(
+            image_bytes,
+            dtype=np.uint8,
+        )
+
+        image = cv2.imdecode(
+            image_array,
+            cv2.IMREAD_COLOR,
+        )
+
+        if image is None:
+            logger.error(
+                "Unable to decode generated image for overlay text"
+            )
+            return image_bytes
+
+        height, width = image.shape[:2]
+
+        # ---------------------------------------------------------
+        # USER SELECTED TEXT SIZE
+        # ---------------------------------------------------------
+
+        try:
+            text_size = int(overlay_text_size)
+        except (TypeError, ValueError):
+            text_size = 48
+
+        # Prevent unusable values
+        text_size = max(16, min(text_size, 150))
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+
+        # Convert requested pixel size into OpenCV font scale
+        font_scale = text_size / 30.0
+
+        thickness = max(
+            2,
+            int(text_size / 18),
+        )
+
+        outline_thickness = thickness + 3
+
+        margin = 40
+
+        text = overlay_text.strip()
+
+        if not text:
+            logger.info(
+                "Overlay text is empty; returning original image"
+            )
+            return image_bytes
+
+        # ---------------------------------------------------------
+        # AUTOMATIC TEXT WRAPPING
+        # ---------------------------------------------------------
+
+        max_text_width = width - (2 * margin)
+
+        words = text.split()
+
+        lines = []
+        current_line = ""
+
+        for word in words:
+            test_line = (
+                word
+                if not current_line
+                else f"{current_line} {word}"
+            )
+
+            (test_width, _), _ = cv2.getTextSize(
+                test_line,
+                font,
+                font_scale,
+                thickness,
+            )
+
+            if test_width <= max_text_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+
+                current_line = word
+
+        if current_line:
+            lines.append(current_line)
+
+        if not lines:
+            logger.warning(
+                "Overlay text could not be wrapped"
+            )
+            return image_bytes
+
+        # ---------------------------------------------------------
+        # CALCULATE TEXT DIMENSIONS
+        # ---------------------------------------------------------
+
+        line_data = []
+
+        for line in lines:
+            (line_width, line_height), baseline = cv2.getTextSize(
+                line,
+                font,
+                font_scale,
+                thickness,
+            )
+
+            line_data.append(
+                {
+                    "width": line_width,
+                    "height": line_height,
+                    "baseline": baseline,
+                }
+            )
+
+        line_spacing = max(
+            10,
+            int(text_size * 0.35),
+        )
+
+        total_text_height = sum(
+            item["height"] + item["baseline"]
+            for item in line_data
+        )
+
+        total_text_height += (
+            line_spacing * (len(lines) - 1)
+        )
+
+        max_line_width = max(
+            item["width"]
+            for item in line_data
+        )
+
+        # ---------------------------------------------------------
+        # CALCULATE START POSITION
+        # ---------------------------------------------------------
+
+        if overlay_position == "top-left":
+            start_y = margin + line_data[0]["height"]
+
+        elif overlay_position == "top-center":
+            start_y = margin + line_data[0]["height"]
+
+        elif overlay_position == "top-right":
+            start_y = margin + line_data[0]["height"]
+
+        elif overlay_position == "center-left":
+            start_y = (
+                height - total_text_height
+            ) // 2 + line_data[0]["height"]
+
+        elif overlay_position == "center":
+            start_y = (
+                height - total_text_height
+            ) // 2 + line_data[0]["height"]
+
+        elif overlay_position == "center-right":
+            start_y = (
+                height - total_text_height
+            ) // 2 + line_data[0]["height"]
+
+        else:
+            start_y = (
+                height
+                - total_text_height
+                - margin
+                + line_data[0]["height"]
+            )
+
+        # ---------------------------------------------------------
+        # DRAW EACH LINE
+        # ---------------------------------------------------------
+
+        current_y = start_y
+
+        for index, line in enumerate(lines):
+
+            line_width = line_data[index]["width"]
+
+            if overlay_position in {
+                "top-center",
+                "center",
+                "bottom-center",
+            }:
+                x = (width - line_width) // 2
+
+            elif overlay_position in {
+                "top-right",
+                "center-right",
+                "bottom-right",
+            }:
+                x = width - line_width - margin
+
+            else:
+                x = margin
+
+            # Keep X inside image
+            x = max(
+                margin,
+                min(
+                    x,
+                    width - line_width - margin,
+                ),
+            )
+
+            # Black outline
+            cv2.putText(
+                image,
+                line,
+                (x, current_y),
+                font,
+                font_scale,
+                (0, 0, 0),
+                outline_thickness,
+                cv2.LINE_AA,
+            )
+
+            # White text
+            cv2.putText(
+                image,
+                line,
+                (x, current_y),
+                font,
+                font_scale,
+                (255, 255, 255),
+                thickness,
+                cv2.LINE_AA,
+            )
+
+            current_y += (
+                line_data[index]["height"]
+                + line_data[index]["baseline"]
+                + line_spacing
+            )
+
+        # ---------------------------------------------------------
+        # ENCODE IMAGE
+        # ---------------------------------------------------------
+
+        success, encoded_image = cv2.imencode(
+            ".jpg",
+            image,
+            [cv2.IMWRITE_JPEG_QUALITY, 95],
+        )
+
+        if not success:
+            logger.error(
+                "Failed to encode image after applying overlay text"
+            )
+            return image_bytes
+
+        logger.info(
+            "Custom overlay text successfully applied | "
+            "position=%s | text_size=%s | lines=%s",
+            overlay_position,
+            text_size,
+            len(lines),
+        )
+
+        return encoded_image.tobytes()
+
+    except Exception:
+        logger.exception(
+            "Failed to apply custom overlay text with OpenCV"
+        )
+        return image_bytes
+
+async def apply_footer_with_opencv(
+    image_bytes: bytes,
+    footer_url: str | None,
+) -> bytes | None:
+    """
+    Add the user's footer as a full-width banner
+    across the bottom of the generated image.
+    """
+
+    if not footer_url:
+        logger.info(
+            "No footer URL configured; skipping footer overlay"
+        )
+        return image_bytes
+
+    try:
+        # ---------------------------------------------------------
+        # 1. Download footer
+        # ---------------------------------------------------------
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            response = await client.get(footer_url)
+            response.raise_for_status()
+            footer_bytes = response.content
+
+        # ---------------------------------------------------------
+        # 2. Decode generated image
+        # ---------------------------------------------------------
+        base_array = np.frombuffer(
+            image_bytes,
+            dtype=np.uint8,
+        )
+
+        base_image = cv2.imdecode(
+            base_array,
+            cv2.IMREAD_COLOR,
+        )
+
+        if base_image is None:
+            logger.error(
+                "Unable to decode generated image for footer"
+            )
+            return None
+
+        # ---------------------------------------------------------
+        # 3. Decode footer
+        # ---------------------------------------------------------
+        footer_array = np.frombuffer(
+            footer_bytes,
+            dtype=np.uint8,
+        )
+
+        footer = cv2.imdecode(
+            footer_array,
+            cv2.IMREAD_UNCHANGED,
+        )
+
+        if footer is None:
+            logger.error(
+                "Unable to decode footer image"
+            )
+            return None
+
+        base_height, base_width = base_image.shape[:2]
+
+        footer_height, footer_width = footer.shape[:2]
+
+        if footer_width <= 0 or footer_height <= 0:
+            logger.error(
+                "Footer image has invalid dimensions"
+            )
+            return None
+
+        # ---------------------------------------------------------
+        # 4. FULL WIDTH footer
+        # ---------------------------------------------------------
+        target_width = base_width
+
+        scale = target_width / footer_width
+
+        target_height = max(
+            1,
+            int(footer_height * scale),
+        )
+
+        footer = cv2.resize(
+            footer,
+            (
+                target_width,
+                target_height,
+            ),
+            interpolation=cv2.INTER_AREA,
+        )
+
+        # ---------------------------------------------------------
+        # 5. Put footer across the bottom
+        # ---------------------------------------------------------
+        x1 = 0
+        y1 = base_height - target_height
+
+        x2 = base_width
+        y2 = base_height
+
+        # ---------------------------------------------------------
+        # 6. If footer is transparent
+        # ---------------------------------------------------------
+        if footer.ndim == 3 and footer.shape[2] == 4:
+
+            footer_rgb = footer[:, :, :3]
+
+            alpha = (
+                footer[:, :, 3]
+                .astype(np.float32)
+                / 255.0
+            )
+
+            background = base_image[
+                y1:y2,
+                x1:x2
+            ].astype(np.float32)
+
+            foreground = footer_rgb.astype(
+                np.float32
+            )
+
+            alpha = alpha[:, :, np.newaxis]
+
+            blended = (
+                foreground * alpha
+                +
+                background * (1.0 - alpha)
+            )
+
+            base_image[
+                y1:y2,
+                x1:x2
+            ] = np.clip(
+                blended,
+                0,
+                255,
+            ).astype(np.uint8)
+
+        # ---------------------------------------------------------
+        # 7. Normal JPG/PNG footer
+        # ---------------------------------------------------------
+        else:
+
+            base_image[
+                y1:y2,
+                x1:x2
+            ] = footer[:, :, :3]
+
+        # ---------------------------------------------------------
+        # 8. Encode final image
+        # ---------------------------------------------------------
+        success, encoded = cv2.imencode(
+            ".jpg",
+            base_image,
+            [
+                cv2.IMWRITE_JPEG_QUALITY,
+                95,
+            ],
+        )
+
+        if not success:
+            logger.error(
+                "Failed to encode image after footer overlay"
+            )
+            return None
+
+        logger.info(
+            "Footer successfully applied | "
+            "position=full-width-bottom | "
+            "width=%s | height=%s",
+            target_width,
+            target_height,
+        )
+
+        return encoded.tobytes()
+
+    except Exception:
+        logger.exception(
+            "Failed to apply footer with OpenCV"
+        )
+        return None
+  
 # ============================================================
 # CLOUDINARY
 # ============================================================
@@ -1313,7 +2032,7 @@ async def generate_post_image(
     try:
 
         async with httpx.AsyncClient(
-            timeout=30.0
+            timeout=120.0
         ) as client:
 
             resp = await client.get(
@@ -1408,18 +2127,100 @@ async def generate_media_url(
     image_prompt: str,
     profile: dict
 ) -> str:
-
     image_bytes = await generate_post_image(
         image_prompt,
-        profile
+        profile,
     )
 
     if not image_bytes:
         return None
 
-    return upload_generated_image(
-        image_bytes
+    # -----------------------------
+    # Company logo
+    # -----------------------------
+
+    logo_url = profile.get("logo_url")
+
+    image_bytes = await apply_logo_with_opencv(
+        image_bytes=image_bytes,
+        logo_url=logo_url,
     )
+
+    if not image_bytes:
+        logger.warning(
+            "Logo branding failed; generated image will not be uploaded"
+        )
+        return None
+
+    # -----------------------------
+    # Custom overlay text
+    # -----------------------------
+    overlay_text = profile.get("overlay_text")
+    overlay_position = profile.get(
+        "overlay_position",
+        "bottom-center",
+    )
+    overlay_text_size = profile.get(
+    "overlay_text_size",
+    48,
+      )
+
+    logger.info(
+        "Overlay text data | text_present=%s | position=%s",
+        bool(overlay_text),
+        overlay_position,
+    )
+
+    if overlay_text:
+        image_bytes = await apply_overlay_text_with_opencv(
+            image_bytes=image_bytes,
+            overlay_text=overlay_text,
+            overlay_position=overlay_position,
+            overlay_text_size=overlay_text_size,
+        )
+
+        if not image_bytes:
+            logger.warning(
+                "Overlay text branding failed; generated image will not be uploaded"
+            )
+            return None
+
+
+    # -----------------------------
+    # Company footer
+    # -----------------------------
+
+    footer_enabled = profile.get(
+        "footer_enabled",
+        False,
+    )
+
+    footer_url = profile.get(
+        "footer_url",
+    )
+
+    if footer_enabled and footer_url:
+        image_bytes = await apply_footer_with_opencv(
+            image_bytes=image_bytes,
+            footer_url=footer_url,
+        )
+
+        if not image_bytes:
+            logger.warning(
+                "Footer branding failed; generated image will not be uploaded"
+            )
+            return None
+
+    else:
+        logger.info(
+            "Footer branding skipped | enabled=%s | has_url=%s",
+            footer_enabled,
+            bool(footer_url),
+        )
+
+    return upload_generated_image(image_bytes)
+
+   
 
 
 # ============================================================

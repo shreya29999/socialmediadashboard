@@ -99,6 +99,39 @@ class UserProfile(Base):
     persona: Mapped[str | None] = mapped_column(String(50), nullable=True)
     industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
     brand_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    footer_enabled: Mapped[bool] = mapped_column(
+    Boolean,
+    default=False,
+    nullable=False,
+    )  
+    footer_url: Mapped[str | None] = mapped_column(
+    String(500),
+    nullable=True,
+     )
+    footer_text: Mapped[str | None] = mapped_column(
+    String(500),
+    nullable=True,
+     )
+
+    overlay_text: Mapped[str | None] = mapped_column(
+    String(500),
+    nullable=True,
+     )
+
+    overlay_text_size: Mapped[int] = mapped_column(
+    Integer,
+    default=48,
+    nullable=False,
+    )
+
+    overlay_position: Mapped[str] = mapped_column(
+    String(50),
+    default="bottom-center",
+    nullable=False,
+     )
+
+   
     tone: Mapped[str | None] = mapped_column(String(50), nullable=True)
     audience: Mapped[str | None] = mapped_column(String(100), nullable=True)
     country_code: Mapped[str | None] = mapped_column(String(5), nullable=True)

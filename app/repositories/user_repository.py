@@ -25,9 +25,20 @@ def create_user(
             org_name=org_name,
             address=address,
         )
+
         db.add(user)
+        db.flush()
+
+        profile = UserProfile(
+            user_id=user.id,
+        )
+
+        db.add(profile)
         db.commit()
+
         db.refresh(user)
+        db.refresh(profile)
+
         return {
             "id": user.id,
             "email": user.email,
@@ -91,6 +102,13 @@ def get_user_profile(user_id: int):
             "persona": profile.persona,
             "industry": profile.industry,
             "brand_name": profile.brand_name,
+            "logo_url": profile.logo_url,
+            "footer_enabled": profile.footer_enabled,
+            "footer_text": profile.footer_text,
+            "footer_url": profile.footer_url,
+            "overlay_text": profile.overlay_text,
+            "overlay_position": profile.overlay_position,
+            "overlay_text_size": profile.overlay_text_size,
             "tone": profile.tone,
             "audience": profile.audience,
             "country_code": profile.country_code,
@@ -150,6 +168,7 @@ def save_user_profile(
     persona: str | None,
     industry: str | None,
     brand_name: str | None,
+    logo_url: str | None,
     tone: str | None,
     audience: str | None,
     country_code: str | None,
@@ -167,6 +186,7 @@ def save_user_profile(
             profile.persona = persona
             profile.industry = industry
             profile.brand_name = brand_name
+            profile.logo_url = logo_url
             profile.tone = tone
             profile.audience = audience
             profile.country_code = country_code
@@ -178,6 +198,7 @@ def save_user_profile(
                 persona=persona,
                 industry=industry,
                 brand_name=brand_name,
+                logo_url=logo_url,
                 tone=tone,
                 audience=audience,
                 country_code=country_code,
@@ -195,6 +216,10 @@ def save_user_profile(
             "persona": profile.persona,
             "industry": profile.industry,
             "brand_name": profile.brand_name,
+            "logo_url": profile.logo_url,
+            "footer_enabled": profile.footer_enabled,
+            "footer_text": profile.footer_text,
+            "footer_url": profile.footer_url,
             "tone": profile.tone,
             "audience": profile.audience,
             "country_code": profile.country_code,
@@ -203,6 +228,83 @@ def save_user_profile(
             "created_at": profile.created_at,
             "updated_at": profile.updated_at,
         }  
+
+def update_user_logo(user_id: int, logo_url: str):
+    with SessionLocal() as db:
+        profile = db.execute(
+            select(UserProfile).where(
+                UserProfile.user_id == user_id
+            )
+        ).scalar_one_or_none()
+
+        if not profile:
+            return None
+
+        profile.logo_url = logo_url
+
+        db.commit()
+        db.refresh(profile)
+
+        return {
+            "id": profile.id,
+            "user_id": profile.user_id,
+            "logo_url": profile.logo_url,
+        }
+
+def update_user_footer(user_id: int, footer_url: str):
+    with SessionLocal() as db:
+        profile = db.execute(
+            select(UserProfile).where(
+                UserProfile.user_id == user_id
+            )
+        ).scalar_one_or_none()
+
+        if not profile:
+            return None
+
+        profile.footer_url = footer_url
+        profile.footer_enabled = True
+
+        db.commit()
+        db.refresh(profile)
+
+        return {
+            "id": profile.id,
+            "user_id": profile.user_id,
+            "footer_enabled": profile.footer_enabled,
+            "footer_url": profile.footer_url,
+        }
+
+def update_user_overlay(
+    user_id: int,
+    overlay_text: str | None,
+    overlay_position: str,
+    overlay_text_size: int,
+):
+    with SessionLocal() as db:
+        profile = db.execute(
+            select(UserProfile).where(
+                UserProfile.user_id == user_id
+            )
+        ).scalar_one_or_none()
+
+        if not profile:
+            return None
+
+        profile.overlay_text = overlay_text
+        profile.overlay_position = overlay_position
+        profile.overlay_text_size = overlay_text_size
+
+        db.commit()
+        db.refresh(profile)
+
+        return {
+            "id": profile.id,
+            "user_id": profile.user_id,
+            "overlay_text": profile.overlay_text,
+            "overlay_position": profile.overlay_position,
+            "overlay_text_size": profile.overlay_text_size,
+        }
 
 def get_superadmin():
     with SessionLocal() as db:
