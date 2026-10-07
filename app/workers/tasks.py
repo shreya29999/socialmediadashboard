@@ -228,7 +228,7 @@ def expiry_checker_task():
         return
     for post in posts:
         try:
-            update_post_status(post["id"], "expired")
+            update_post_status(post.id, "expired")
             full_post = get_post_by_id(post["id"])
             user      = get_user_by_id(full_post["user_id"])
             scheduled_at = post["scheduled_at"].strftime("%B %d, %Y at %I:%M %p UTC")

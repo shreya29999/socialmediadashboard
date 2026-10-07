@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 import httpx
+from fastapi import Query 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.dependencies import get_current_user
@@ -87,13 +88,44 @@ def get_me(current_user: dict = Depends(get_current_user)):
     return user
 
 
+# @router.get("/facebook/connect")
+# def facebook_connect(current_user: dict = Depends(get_current_user)):
+#     user_id = current_user["user_id"]
+
+#     existing = get_social_account(user_id, "facebook")
+
+#     if existing:
+#         return {
+#             "already_connected": True,
+#             "message": "Facebook already connected ✅",
+#             "page_id": existing["page_id"],
+#         }
+
+#     url = (
+#         "https://www.facebook.com/v26.0/dialog/oauth"
+#         f"?client_id={META_APP_ID}"
+#         f"&redirect_uri={META_REDIRECT_URI}"
+#         f"&config_id={META_LOGIN_CONFIG_ID}"
+#         f"&state={user_id}"
+#         f"&response_type=code"
+#     )
+
+#     return {
+#         "already_connected": False,
+#         "oauth_url": url,
+#     }
+
 @router.get("/facebook/connect")
-def facebook_connect(current_user: dict = Depends(get_current_user)):
+def facebook_connect(
+    force: bool = Query(False),   # ⭐ NEW
+    current_user: dict = Depends(get_current_user),
+):
     user_id = current_user["user_id"]
 
     existing = get_social_account(user_id, "facebook")
 
-    if existing:
+    # ⭐ Skip early return if force=true (for re-authorization)
+    if existing and not force:
         return {
             "already_connected": True,
             "message": "Facebook already connected ✅",
@@ -112,6 +144,7 @@ def facebook_connect(current_user: dict = Depends(get_current_user)):
     return {
         "already_connected": False,
         "oauth_url": url,
+        "forced": force,   # ⭐ helpful for debugging
     }
 
 @router.get("/facebook/callback")
@@ -210,7 +243,7 @@ def linkedin_connect(current_user: dict = Depends(get_current_user)):
         f"https://www.linkedin.com/oauth/v2/authorization"
         f"?response_type=code&client_id={LINKEDIN_CLIENT_ID}"
         f"&redirect_uri={LINKEDIN_REDIRECT_URI}"
-        # f"&scope=openid profile email w_member_social"
+        f"&scope=openid profile email w_member_social"
         f"&scope=openid profile email"
         f"&state={current_user['user_id']}"
     )

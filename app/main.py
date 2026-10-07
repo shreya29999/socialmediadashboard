@@ -17,8 +17,6 @@ from app.api.v1.users import router as users_router
 from app.core.config import ALLOWED_ORIGINS, configure_cloudinary
 from app.core.logging import logger
 
-
-
 configure_cloudinary()
 
 app = FastAPI(
@@ -29,10 +27,18 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",   
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+        "https://espresso-expulsion-luckily.ngrok-free.dev",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 @app.on_event("startup")

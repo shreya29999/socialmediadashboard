@@ -3,9 +3,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
 from app.db.base import Base
-
 
 class User(Base):
     __tablename__ = "users"
@@ -113,11 +111,9 @@ class UserProfile(Base):
     String(500),
     nullable=True,
      )
+    overlay_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    overlay_text: Mapped[str | None] = mapped_column(
-    String(500),
-    nullable=True,
-     )
+   
 
     overlay_text_size: Mapped[int] = mapped_column(
     Integer,
