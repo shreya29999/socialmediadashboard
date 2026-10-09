@@ -4,6 +4,16 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 
 class User(Base):
     __tablename__ = "users"
@@ -21,22 +31,201 @@ class User(Base):
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     admin = relationship("User", remote_side="User.id", uselist=False)
+    brand_memberships = relationship(
+    "UserBrand",
+    back_populates="user",
+    cascade="all, delete-orphan",
+     )
 
+
+
+
+# class SocialAccount(Base):
+#     __tablename__ = "social_accounts"
+
+#     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+#     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+#     platform: Mapped[str] = mapped_column(String(50), nullable=False)
+#     access_token: Mapped[str] = mapped_column(Text, nullable=False)
+#     refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+#     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+#     page_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+#     account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+#     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+#     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class SocialAccount(Base):
     __tablename__ = "social_accounts"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    platform: Mapped[str] = mapped_column(String(50), nullable=False)
-    access_token: Mapped[str] = mapped_column(Text, nullable=False)
-    refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-    token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    page_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "platform",
+            "page_id",
+            name="uq_social_accounts_user_platform_page",
+        ),
+    )
 
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    platform: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    access_token: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    refresh_token: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
+    page_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    account_name: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    account_email: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+
+class Brand(Base):
+    __tablename__ = "brands"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(
+        String(150),
+        nullable=False,
+    )
+
+    slug: Mapped[str] = mapped_column(
+        String(150),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    description: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    logo_url: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    memberships = relationship(
+        "UserBrand",
+        back_populates="brand",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserBrand(Base):
+    __tablename__ = "user_brands"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    brand_id: Mapped[int] = mapped_column(
+        ForeignKey("brands.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(30),
+        default="owner",
+        nullable=False,
+    )
+
+    is_default: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+    )
+
+    user = relationship(
+        "User",
+        back_populates="brand_memberships",
+    )
+
+    brand = relationship(
+        "Brand",
+        back_populates="memberships",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "brand_id",
+            name="uq_user_brand",
+        ),
+    )
 
 class PostTemplate(Base):
     __tablename__ = "post_templates"

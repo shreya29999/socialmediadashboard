@@ -1467,8 +1467,19 @@ def _get_rag_documents(
 
     for post in recent_posts:
         platforms = post.get("platforms") or []
+
         if isinstance(platforms, str):
             platforms = [platforms]
+        elif isinstance(platforms, list):
+            flattened_platforms = []
+
+            for platform in platforms:
+                if isinstance(platform, list):
+                    flattened_platforms.extend(platform)
+                elif isinstance(platform, str):
+                    flattened_platforms.append(platform)
+
+            platforms = flattened_platforms
 
         docs.append(
             {
@@ -1946,7 +1957,7 @@ def generate_post_content_from_title(
         )
 
         logger.info(
-            "Raw title-based Groq response: %r",
+            "Raw title-based LLM response: %r",
             raw,
         )
 

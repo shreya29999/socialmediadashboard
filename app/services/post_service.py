@@ -15,7 +15,7 @@ class PostService:
     async def generate_and_store(
         user_id:int,
         title:str,
-        platform:str,
+        platforms: list[str],
         generate_image:bool = True,
         scheduled_at: Optional[datetime] = None,
     ):
@@ -23,7 +23,7 @@ class PostService:
             "Starting AI post generation | user_id=%s | title=%s | platform=%s",
             user_id,
             title,
-            platform,
+            platforms,
         )
 
         profile = get_user_profile(user_id)
@@ -33,7 +33,7 @@ class PostService:
         content = generate_post_content_from_title(
             profile=profile,
             title=title,
-            platform=platform,
+            platform=platforms[0],
         )
         caption = (content.get("caption") or "").strip()
         image_prompt = (content.get("image_prompt") or "").strip()
@@ -70,7 +70,7 @@ class PostService:
             user_id=user_id,
             content_text=caption,
             media_url=image_url,
-            platforms=[platform],
+            platforms=[platforms],
             recurrence_type="ONE_TIME",
             interval_days=1,
             start_date=scheduled_at,
@@ -103,7 +103,7 @@ class PostService:
         return {
             "post_id": post_id,
             "title": title,
-            "platform": platform,
+            "platforms": platforms,
             "caption": caption,
             "image_prompt": image_prompt,
             "image_url": image_url,

@@ -40,8 +40,8 @@ class GeneratePostRequest(BaseModel):
         description="Topic or title for the AI-generated social media post.",
     )
 
-    platform: Platform = Field(
-        default=Platform.linkedin,
+    platforms: list[Platform] = Field(
+        ...,
         description="Social media platform for the generated post.",
     )
     generate_image: bool = Field(

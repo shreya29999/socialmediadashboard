@@ -57,6 +57,60 @@ BASE_URL = os.getenv("BASE_URL")
 def init_worker(**kwargs):
     logger.info("Celery worker initialized")
 
+# @celery_app.task(
+#     bind=True,
+#     name="tasks.generate_post_task",
+#     autoretry_for=(Exception,),
+#     retry_backoff=True,
+#     retry_kwargs={"max_retries": 3},
+# )
+# def generate_post_task(
+#     self,
+#     user_id: int,
+#     title: str,
+#     platforms: list[str],
+#     generate_image: bool = True,
+#     scheduled_at: str | None = None,
+# ):
+#     logger.info(
+#         "Starting async post generation | user_id=%s | title=%s | platform=%s",
+#         user_id,
+#         title,
+#         platforms,
+#     )
+
+#     try:
+#         parsed_scheduled_at = None
+
+#         if scheduled_at:
+#             parsed_scheduled_at = datetime.fromisoformat(scheduled_at)
+
+#         result = asyncio.run(
+#             PostService.generate_and_store(
+#                 user_id=user_id,
+#                 title=title,
+#                 platforms=platforms,
+#                 generate_image=generate_image,
+#                 scheduled_at=parsed_scheduled_at,
+#             )
+#         )
+
+#         logger.info(
+#             "Async post generation completed | user_id=%s | post_id=%s",
+#             user_id,
+#             result.get("post_id"),
+#         )
+
+#         return result
+
+#     except Exception:
+#         logger.exception(
+#             "Async post generation failed | user_id=%s | title=%s",
+#             user_id,
+#             title,
+#         )
+#         raise
+
 @celery_app.task(
     bind=True,
     name="tasks.generate_post_task",
@@ -68,15 +122,15 @@ def generate_post_task(
     self,
     user_id: int,
     title: str,
-    platform: str,
+    platforms: list[str],
     generate_image: bool = True,
     scheduled_at: str | None = None,
 ):
     logger.info(
-        "Starting async post generation | user_id=%s | title=%s | platform=%s",
+        "Starting async post generation | user_id=%s | title=%s | platforms=%s",
         user_id,
         title,
-        platform,
+        platforms,
     )
 
     try:
@@ -89,7 +143,7 @@ def generate_post_task(
             PostService.generate_and_store(
                 user_id=user_id,
                 title=title,
-                platform=platform,
+                platforms=platforms,
                 generate_image=generate_image,
                 scheduled_at=parsed_scheduled_at,
             )
@@ -266,112 +320,415 @@ def publish_due_posts_task():
             logger.exception("Failed to queue due post %s", post["id"])
 
 
+# @celery_app.task(
+#     name="tasks.publish_post_task",
+#     bind=True,
+#     max_retries=3,
+#     default_retry_delay=60
+# )
+
+# def publish_post_task(self, post_id: int):
+#     logger.info("Publishing post %s...", post_id)
+
+#     try:
+#         post = get_post_by_id(post_id)
+#         if not post:
+#             logger.warning("Post %s not found", post_id)
+#             return
+#         if post["status"] == "posted":
+#             logger.info("Post %s already published", post_id)
+#             return
+#         update_post_status(post_id, "posting")
+#         existing_targets = get_targets_for_post(post_id)
+#         if not existing_targets:
+#             create_post_targets(post_id, post["platforms"])
+#         success_platforms = []
+#         failed_platforms  = []
+#         logger.info("Platforms to publish: %s", post['platforms'])
+#         for platform in post["platforms"]:
+#             logger.info("Attempting publish for %s", platform)
+#             try:
+#                 access_token = check_and_refresh_token(post["user_id"], platform)
+#                 if not access_token:
+#                     raise Exception(f"No valid token for {platform}")
+#                 if platform == "facebook":
+#                     result = _publish_to_facebook(post, access_token)
+#                 elif platform == "instagram":
+#                     result = _publish_to_instagram(post, access_token)
+#                 elif platform == "linkedin":
+#                     result = _publish_to_linkedin(post, access_token)
+#                 else:
+#                     raise Exception(f"Unknown platform: {platform}")
+#                 if result["success"]:
+#                     update_target_status(post_id, platform, "posted")
+#                     success_platforms.append(platform)
+#                     logger.info("Posted to %s", platform)
+#                 else:
+#                     raise Exception(result.get("error", "Unknown error"))
+#             except Exception as platform_error:
+#                 update_target_status(post_id, platform, "failed", str(platform_error))
+#                 failed_platforms.append(platform)
+#                 logger.error("Failed to post to %s: %s", platform, platform_error)
+#         user = get_user_by_id(post["user_id"])
+#         published_at = datetime.now(timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
+#         if success_platforms and not failed_platforms:
+#             update_post_status(post_id, "posted")
+#             send_success_email(
+#                 to_email     = user["email"],
+#                 post_content = post["content_text"],
+#                 platforms    = success_platforms,
+#                 published_at = published_at
+#             )
+#             create_notification(
+#                 user_id = post["user_id"],
+#                 type    = "post_published",
+#                 title   = "Your post is live!",
+#                 message = f"Published on {', '.join(success_platforms)} at {published_at}.",
+#                 link    = f"/posts/{post_id}",
+#                 post_id = post_id
+#             )
+#             logger.info("Post %s published successfully on: %s", post_id, success_platforms)
+#         elif success_platforms and failed_platforms:
+#             update_post_status(post_id, "posted")
+#             send_success_email(
+#                 to_email     = user["email"],
+#                 post_content = post["content_text"],
+#                 platforms    = success_platforms,
+#                 published_at = published_at
+#             )
+#             create_notification(
+#                 user_id = post["user_id"],
+#                 type    = "post_published",
+#                 title   = "Your post is live (partially)",
+#                 message = f"Published on {', '.join(success_platforms)}, but failed on {', '.join(failed_platforms)}.",
+#                 link    = f"/posts/{post_id}",
+#                 post_id = post_id
+#             )
+#             logger.warning("Post %s partially published. Success: %s, Failed: %s", post_id, success_platforms, failed_platforms)
+#         else:
+#             update_post_status(post_id, "failed")
+#             send_failure_email(
+#                 to_email         = user["email"],
+#                 post_content     = post["content_text"],
+#                 failed_platforms = failed_platforms,
+#                 error            = "All platforms failed to publish"
+#             )
+#             create_notification(
+#                 user_id = post["user_id"],
+#                 type    = "post_failed",
+#                 title   = "Post publishing failed",
+#                 message = f"Failed to publish on {', '.join(failed_platforms)}. Please check your connected accounts.",
+#                 link    = f"/posts/{post_id}",
+#                 post_id = post_id
+#             )
+#             logger.error("Post %s failed on all platforms: %s", post_id, failed_platforms)
+#         _generate_next_occurrence(post)
+#     except Exception as e:
+#         logger.exception("publish_post_task failed for post %s", post_id)
+#         update_post_status(post_id, "failed")
+#         raise self.retry(exc=e)
+
 @celery_app.task(
     name="tasks.publish_post_task",
     bind=True,
     max_retries=3,
-    default_retry_delay=60
+    default_retry_delay=60,
 )
-
 def publish_post_task(self, post_id: int):
     logger.info("Publishing post %s...", post_id)
 
     try:
         post = get_post_by_id(post_id)
+
         if not post:
             logger.warning("Post %s not found", post_id)
             return
+
         if post["status"] == "posted":
             logger.info("Post %s already published", post_id)
             return
+
         update_post_status(post_id, "posting")
+
+        # ---------------------------------------------------------
+        # Normalize platforms
+        # ---------------------------------------------------------
+
+        platforms = post.get("platforms") or []
+
+        # Handle accidental nested list:
+        # [['facebook', 'instagram', 'linkedin']]
+        if (
+            len(platforms) == 1
+            and isinstance(platforms[0], list)
+        ):
+            platforms = platforms[0]
+
+        # Make sure every platform is a string
+        platforms = [
+            platform
+            for platform in platforms
+            if isinstance(platform, str)
+        ]
+
+        if not platforms:
+            raise Exception("No valid platforms found for post")
+
+        logger.info(
+            "Normalized platforms for post %s: %s",
+            post_id,
+            platforms,
+        )
+
+        # ---------------------------------------------------------
+        # Create targets
+        # ---------------------------------------------------------
+
         existing_targets = get_targets_for_post(post_id)
+
         if not existing_targets:
-            create_post_targets(post_id, post["platforms"])
+            create_post_targets(
+                post_id,
+                platforms,
+            )
+
         success_platforms = []
-        failed_platforms  = []
-        logger.info("Platforms to publish: %s", post['platforms'])
-        for platform in post["platforms"]:
-            logger.info("Attempting publish for %s", platform)
+        failed_platforms = []
+
+        logger.info(
+            "Platforms to publish: %s",
+            platforms,
+        )
+
+        # ---------------------------------------------------------
+        # Publish to each platform
+        # ---------------------------------------------------------
+
+        for platform in platforms:
+            logger.info(
+                "Attempting publish for %s",
+                platform,
+            )
+
             try:
-                access_token = check_and_refresh_token(post["user_id"], platform)
+                access_token = check_and_refresh_token(
+                    post["user_id"],
+                    platform,
+                )
+
                 if not access_token:
-                    raise Exception(f"No valid token for {platform}")
+                    raise Exception(
+                        f"No valid token for {platform}"
+                    )
+
                 if platform == "facebook":
-                    result = _publish_to_facebook(post, access_token)
+
+                    result = _publish_to_facebook(
+                        post,
+                        access_token,
+                    )
+
                 elif platform == "instagram":
-                    result = _publish_to_instagram(post, access_token)
+
+                    result = _publish_to_instagram(
+                        post,
+                        access_token,
+                    )
+
                 elif platform == "linkedin":
-                    result = _publish_to_linkedin(post, access_token)
+
+                    result = _publish_to_linkedin(
+                        post,
+                        access_token,
+                    )
+
                 else:
-                    raise Exception(f"Unknown platform: {platform}")
+                    raise Exception(
+                        f"Unknown platform: {platform}"
+                    )
+
                 if result["success"]:
-                    update_target_status(post_id, platform, "posted")
+
+                    update_target_status(
+                        post_id,
+                        platform,
+                        "posted",
+                    )
+
                     success_platforms.append(platform)
-                    logger.info("Posted to %s", platform)
+
+                    logger.info(
+                        "Posted to %s",
+                        platform,
+                    )
+
                 else:
-                    raise Exception(result.get("error", "Unknown error"))
+                    raise Exception(
+                        result.get(
+                            "error",
+                            "Unknown error",
+                        )
+                    )
+
             except Exception as platform_error:
-                update_target_status(post_id, platform, "failed", str(platform_error))
+
+                update_target_status(
+                    post_id,
+                    platform,
+                    "failed",
+                    str(platform_error),
+                )
+
                 failed_platforms.append(platform)
-                logger.error("Failed to post to %s: %s", platform, platform_error)
-        user = get_user_by_id(post["user_id"])
-        published_at = datetime.now(timezone.utc).strftime("%B %d, %Y at %I:%M %p UTC")
+
+                logger.error(
+                    "Failed to post to %s: %s",
+                    platform,
+                    platform_error,
+                )
+
+        # ---------------------------------------------------------
+        # Final post status
+        # ---------------------------------------------------------
+
+        user = get_user_by_id(
+            post["user_id"]
+        )
+
+        published_at = datetime.now(
+            timezone.utc
+        ).strftime(
+            "%B %d, %Y at %I:%M %p UTC"
+        )
+
+        # ---------------------------------------------------------
+        # All successful
+        # ---------------------------------------------------------
+
         if success_platforms and not failed_platforms:
-            update_post_status(post_id, "posted")
+
+            update_post_status(
+                post_id,
+                "posted",
+            )
+
             send_success_email(
-                to_email     = user["email"],
-                post_content = post["content_text"],
-                platforms    = success_platforms,
-                published_at = published_at
+                to_email=user["email"],
+                post_content=post["content_text"],
+                platforms=success_platforms,
+                published_at=published_at,
             )
+
             create_notification(
-                user_id = post["user_id"],
-                type    = "post_published",
-                title   = "Your post is live!",
-                message = f"Published on {', '.join(success_platforms)} at {published_at}.",
-                link    = f"/posts/{post_id}",
-                post_id = post_id
+                user_id=post["user_id"],
+                type="post_published",
+                title="Your post is live!",
+                message=(
+                    f"Published on "
+                    f"{', '.join(success_platforms)} "
+                    f"at {published_at}."
+                ),
+                link=f"/posts/{post_id}",
+                post_id=post_id,
             )
-            logger.info("Post %s published successfully on: %s", post_id, success_platforms)
+
+            logger.info(
+                "Post %s published successfully on: %s",
+                post_id,
+                success_platforms,
+            )
+
+        # ---------------------------------------------------------
+        # Partially successful
+        # ---------------------------------------------------------
+
         elif success_platforms and failed_platforms:
-            update_post_status(post_id, "posted")
+
+            update_post_status(
+                post_id,
+                "posted",
+            )
+
             send_success_email(
-                to_email     = user["email"],
-                post_content = post["content_text"],
-                platforms    = success_platforms,
-                published_at = published_at
+                to_email=user["email"],
+                post_content=post["content_text"],
+                platforms=success_platforms,
+                published_at=published_at,
             )
+
             create_notification(
-                user_id = post["user_id"],
-                type    = "post_published",
-                title   = "Your post is live (partially)",
-                message = f"Published on {', '.join(success_platforms)}, but failed on {', '.join(failed_platforms)}.",
-                link    = f"/posts/{post_id}",
-                post_id = post_id
+                user_id=post["user_id"],
+                type="post_published",
+                title="Your post is live (partially)",
+                message=(
+                    f"Published on "
+                    f"{', '.join(success_platforms)}, "
+                    f"but failed on "
+                    f"{', '.join(failed_platforms)}."
+                ),
+                link=f"/posts/{post_id}",
+                post_id=post_id,
             )
-            logger.warning("Post %s partially published. Success: %s, Failed: %s", post_id, success_platforms, failed_platforms)
+
+            logger.warning(
+                "Post %s partially published. "
+                "Success: %s, Failed: %s",
+                post_id,
+                success_platforms,
+                failed_platforms,
+            )
+
+        # ---------------------------------------------------------
+        # All failed
+        # ---------------------------------------------------------
+
         else:
-            update_post_status(post_id, "failed")
+
+            update_post_status(
+                post_id,
+                "failed",
+            )
+
             send_failure_email(
-                to_email         = user["email"],
-                post_content     = post["content_text"],
-                failed_platforms = failed_platforms,
-                error            = "All platforms failed to publish"
+                to_email=user["email"],
+                post_content=post["content_text"],
+                failed_platforms=failed_platforms,
+                error="All platforms failed to publish",
             )
+
             create_notification(
-                user_id = post["user_id"],
-                type    = "post_failed",
-                title   = "Post publishing failed",
-                message = f"Failed to publish on {', '.join(failed_platforms)}. Please check your connected accounts.",
-                link    = f"/posts/{post_id}",
-                post_id = post_id
+                user_id=post["user_id"],
+                type="post_failed",
+                title="Post publishing failed",
+                message=(
+                    f"Failed to publish on "
+                    f"{', '.join(failed_platforms)}. "
+                    f"Please check your connected accounts."
+                ),
+                link=f"/posts/{post_id}",
+                post_id=post_id,
             )
-            logger.error("Post %s failed on all platforms: %s", post_id, failed_platforms)
+
+            logger.error(
+                "Post %s failed on all platforms: %s",
+                post_id,
+                failed_platforms,
+            )
+
         _generate_next_occurrence(post)
+
     except Exception as e:
-        logger.exception("publish_post_task failed for post %s", post_id)
-        update_post_status(post_id, "failed")
+
+        logger.exception(
+            "publish_post_task failed for post %s",
+            post_id,
+        )
+
+        update_post_status(
+            post_id,
+            "failed",
+        )
+
         raise self.retry(exc=e)
 
 def _publish_to_facebook(post: dict, access_token: str) -> dict:
@@ -538,55 +895,75 @@ def _publish_to_instagram(post: dict, access_token: str) -> dict:
 
     return {"success": False, "error": "Instagram: max retries exceeded"}
 
+
+
+
 def _upload_linkedin_image(image_url: str, access_token: str, owner: str) -> dict:
     import httpx
 
     headers = {
-        "Authorization"             : f"Bearer {access_token}",
-        "Content-Type"              : "application/json",
-        "X-Restli-Protocol-Version" : "2.0.0"
+        "Authorization": f"Bearer {access_token}",
+        "Linkedin-Version": "202609",
+        "X-Restli-Protocol-Version": "2.0.0",
+        "Content-Type": "application/json",
     }
-    register_payload = {
-        "registerUploadRequest": {
-            "owner": owner,
-            "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-            "serviceRelationships": [
-                {
-                    "identifier": "urn:li:userGeneratedContent",
-                    "relationshipType": "OWNER"
-                }
-            ],
-            "supportedUploadMechanism": ["SYNCHRONOUS_UPLOAD"]
-        }
-    }
-    reg_response = httpx.post(
-        "https://api.linkedin.com/v2/assets?action=registerUpload",
-        json=register_payload,
-        headers=headers,
-        timeout=30.0
-    )
-    reg_data = reg_response.json()
-    asset = reg_data.get("value", {}).get("asset")
-    upload_mechanism = reg_data.get("value", {}).get("uploadMechanism", {})
-    upload_url = upload_mechanism.get("com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest", {}).get("uploadUrl")
 
-    if not asset or not upload_url:
-        logger.error("LinkedIn asset registration failed: %s", reg_data)
-        return {
-            "success": False,
-            "error": reg_data.get("message", "LinkedIn asset registration failed")
-        }
-    image_response = httpx.get(image_url, timeout=30.0)
-    if image_response.status_code != 200:
-        return {"success": False, "error": "Failed to fetch image for LinkedIn upload"}
-    content_type = image_response.headers.get("content-type", "image/jpeg")
-    upload_headers = {"Content-Type": content_type}
-    put_response = httpx.put(upload_url, content=image_response.content, headers=upload_headers, timeout=60.0)
-    if put_response.status_code not in (200, 201, 202):
-        logger.error("LinkedIn upload failed: %s %s", put_response.status_code, put_response.text)
-        return {"success": False, "error": "LinkedIn image upload failed"}
-    return {"success": True, "asset": asset}
+    try:
+        # 1. Initialize upload (Images API)
+        init = httpx.post(
+            "https://api.linkedin.com/rest/images?action=initializeUpload",
+            json={"initializeUploadRequest": {"owner": owner}},
+            headers=headers,
+            timeout=30.0,
+        )
+        try:
+            init_data = init.json()
+        except ValueError:
+            init_data = {"message": init.text}
 
+        if init.status_code not in (200, 201):
+            logger.error("LinkedIn image init failed | status=%s | response=%s",
+                         init.status_code, init_data)
+            return {"success": False,
+                    "error": init_data.get("message", "LinkedIn image initialization failed")}
+
+        value = init_data.get("value", {})
+        upload_url = value.get("uploadUrl")
+        image_urn = value.get("image")          # urn:li:image:...
+
+        if not upload_url or not image_urn:
+            logger.error("LinkedIn image init incomplete: %s", init_data)
+            return {"success": False, "error": "LinkedIn did not return image upload details"}
+
+        # 2. Download the image
+        img = httpx.get(image_url, timeout=60.0)
+        if img.status_code != 200:
+            return {"success": False,
+                    "error": f"Failed to download image (HTTP {img.status_code})"}
+
+        # 3. Upload the bytes
+        put = httpx.put(
+            upload_url,
+            content=img.content,
+            headers={"Content-Type": img.headers.get("content-type", "image/jpeg")},
+            timeout=120.0,
+        )
+        if put.status_code not in (200, 201, 202):
+            logger.error("LinkedIn image upload failed | status=%s | response=%s",
+                         put.status_code, put.text)
+            return {"success": False, "error": "LinkedIn image upload failed"}
+
+        logger.info("LinkedIn image uploaded | image=%s", image_urn)
+        return {"success": True, "asset": image_urn}
+
+    except httpx.TimeoutException:
+        return {"success": False, "error": "LinkedIn image upload timed out"}
+    except Exception as exc:
+        logger.exception("LinkedIn image upload failed")
+        return {"success": False, "error": str(exc)}
+
+
+        
 def _upload_linkedin_video(video_url: str, access_token: str, owner: str) -> dict:
     import httpx
 

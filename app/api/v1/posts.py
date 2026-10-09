@@ -230,16 +230,17 @@ async def generate_ai_post(
 
     try:
         task = generate_post_task.delay(
-            user_id=user_id,
-            title=req.title,
-            platform=req.platform.value,
-            generate_image=req.generate_image,
-            scheduled_at=(
-                req.scheduled_at.isoformat()
-                if req.scheduled_at
-                else None
-            ),
-        )
+        user_id=user_id,
+        title=req.title,
+        platforms=[platform.value for platform in req.platforms],
+        generate_image=req.generate_image,
+        scheduled_at=(
+        req.scheduled_at.isoformat()
+        if req.scheduled_at
+        else None
+       ),
+       )
+        
 
         logger.info(
             "AI post generation queued | user_id=%s | task_id=%s",
