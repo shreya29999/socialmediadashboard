@@ -13,16 +13,45 @@ class Platform(str, Enum):
     facebook  = "facebook"
     instagram = "instagram"
     linkedin  = "linkedin"
+# class CreatePostRequest(BaseModel):
+#     content_text    : str = Field(..., min_length=1, max_length=2000)
+#     media_url       : Optional[str] = None
+#     platforms       : List[Platform]
+#     recurrence_type : RecurrenceType = RecurrenceType.ONE_TIME
+#     interval_days   : Optional[int] = 1
+#     start_date      : str
+#     end_date        : Optional[str] = None
+#     max_occurrences : Optional[int] = None
+#     timezone        : Optional[str] = "UTC"
+
 class CreatePostRequest(BaseModel):
-    content_text    : str = Field(..., min_length=1, max_length=2000)
-    media_url       : Optional[str] = None
-    platforms       : List[Platform]
-    recurrence_type : RecurrenceType = RecurrenceType.ONE_TIME
-    interval_days   : Optional[int] = 1
-    start_date      : str
-    end_date        : Optional[str] = None
-    max_occurrences : Optional[int] = None
-    timezone        : Optional[str] = "UTC"
+    content_text: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+    )
+
+    media_url: Optional[str] = None
+
+    # Brand/workspace for this post
+    brand_id: int
+
+    # Specific social accounts selected for publishing
+    social_account_ids: List[int]
+
+    platforms: List[Platform]
+
+    recurrence_type: RecurrenceType = RecurrenceType.ONE_TIME
+
+    interval_days: Optional[int] = 1
+
+    start_date: str
+
+    end_date: Optional[str] = None
+
+    max_occurrences: Optional[int] = None
+
+    timezone: Optional[str] = "UTC"
 class UpdatePostRequest(BaseModel):
     content_text : Optional[str] = Field(None, min_length=1, max_length=2000)
     media_url    : Optional[str] = None

@@ -148,6 +148,26 @@ def update_post_status(post_id: int, status: str):
         db.commit()
 
 
+# def get_targets_for_post(scheduled_post_id: int):
+#     with SessionLocal() as db:
+#         stmt = select(PostTarget).where(
+#             PostTarget.scheduled_post_id == scheduled_post_id
+#         )
+
+#         targets = db.execute(stmt).scalars().all()
+
+#         return [
+#             {
+#                 "id": target.id,
+#                 "scheduled_post_id": target.scheduled_post_id,
+#                 "platform": target.platform,
+#                 "status": target.status,
+#                 "error_message": target.error_message,
+#                 "posted_at": target.posted_at,
+#             }
+#             for target in targets
+#         ]
+
 def get_targets_for_post(scheduled_post_id: int):
     with SessionLocal() as db:
         stmt = select(PostTarget).where(
@@ -160,6 +180,7 @@ def get_targets_for_post(scheduled_post_id: int):
             {
                 "id": target.id,
                 "scheduled_post_id": target.scheduled_post_id,
+                "social_account_id": target.social_account_id,
                 "platform": target.platform,
                 "status": target.status,
                 "error_message": target.error_message,
@@ -169,21 +190,63 @@ def get_targets_for_post(scheduled_post_id: int):
         ]
 
 
-def create_post_targets(scheduled_post_id: int, platforms: list[str]):
+
+# def create_post_targets(scheduled_post_id: int, platforms: list[str]):
+#     with SessionLocal() as db:
+#         for platform in platforms:
+#             target = PostTarget(
+#                 scheduled_post_id=scheduled_post_id,
+#                 platform=platform,
+#             )
+#             db.add(target)
+
+#         db.commit()
+
+def create_post_targets(
+    scheduled_post_id: int,
+    targets: list[dict],
+):
     with SessionLocal() as db:
-        for platform in platforms:
+        for target_data in targets:
             target = PostTarget(
                 scheduled_post_id=scheduled_post_id,
-                platform=platform,
+                social_account_id=target_data["social_account_id"],
+                platform=target_data["platform"],
             )
             db.add(target)
 
         db.commit()
 
 
+# def update_target_status(
+#     scheduled_post_id: int,
+#     platform: str,
+#     status: str,
+#     error_message: str | None = None,
+# ):
+#     with SessionLocal() as db:
+#         stmt = (
+#             update(PostTarget)
+#             .where(
+#                 PostTarget.scheduled_post_id == scheduled_post_id,
+#                 PostTarget.platform == platform,
+#             )
+#             .values(
+#                 status=status,
+#                 error_message=error_message,
+#                 posted_at=(
+#                     datetime.now(timezone.utc)
+#                     if status == "posted"
+#                     else None
+#                 ),
+#             )
+#         )
+
+#         db.execute(stmt)
+#         db.commit()
+
 def update_target_status(
-    scheduled_post_id: int,
-    platform: str,
+    target_id: int,
     status: str,
     error_message: str | None = None,
 ):
@@ -191,8 +254,7 @@ def update_target_status(
         stmt = (
             update(PostTarget)
             .where(
-                PostTarget.scheduled_post_id == scheduled_post_id,
-                PostTarget.platform == platform,
+                PostTarget.id == target_id,
             )
             .values(
                 status=status,

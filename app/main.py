@@ -1,12 +1,12 @@
-from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+
 from app.api.v1.admin import router as admin_router
 from app.api.v1.ai import router as ai_router
 from app.api.v1.analytics import router as analytics_router
 from app.api.v1.approvals import router as approvals_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.brands import router as brands_router
 from app.api.v1.calendar import router as calendar_router
 from app.api.v1.media import router as media_router
 from app.api.v1.notifications import router as notifications_router
@@ -14,7 +14,8 @@ from app.api.v1.posts import router as posts_router
 from app.api.v1.social_accounts import router as social_accounts_router
 from app.api.v1.superadmin import router as superadmin_router
 from app.api.v1.users import router as users_router
-from app.core.config import ALLOWED_ORIGINS, configure_cloudinary
+
+from app.core.config import configure_cloudinary
 from app.core.logging import logger
 
 configure_cloudinary()
@@ -29,7 +30,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://127.0.0.1:5173",   
+        "http://127.0.0.1:5173",
         "http://localhost:5174",
         "http://127.0.0.1:5174",
         "https://espresso-expulsion-luckily.ngrok-free.dev",
@@ -40,10 +41,10 @@ app.add_middleware(
 )
 
 
-
 @app.on_event("startup")
 async def startup():
     logger.info("App started")
+
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -67,7 +68,4 @@ app.include_router(ai_router)
 app.include_router(admin_router)
 app.include_router(superadmin_router)
 app.include_router(notifications_router)
-
-# Serve the dashboard from FastAPI so its API requests stay on the same origin.
-frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
-app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
+app.include_router(brands_router)

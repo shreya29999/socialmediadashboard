@@ -176,6 +176,17 @@ def set_default_brand(
     user_id: int,
     brand_id: int,
 ):
+    """
+    Set a brand as the default for a user.
+
+    NOTE:
+    - The `user_brands` table has a partial UNIQUE constraint
+      `uq_user_brands_one_default` on (user_id) WHERE is_default = TRUE.
+    - To avoid a UniqueViolation, we must commit the removal of
+      the previous default BEFORE setting the new default.
+    - We use `db.flush()` between the two steps so SQLAlchemy
+      sends two separate UPDATE batches, in the correct order.
+    """
     with SessionLocal() as db:
         membership = db.execute(
             select(UserBrand).where(
@@ -187,25 +198,41 @@ def set_default_brand(
         if membership is None:
             return None
 
-        # Remove default status from all user's brands.
-        user_memberships = db.execute(
-            select(UserBrand).where(
-                UserBrand.user_id == user_id
-            )
-        ).scalars().all()
+        try:
+            # ─── Step 1: Remove default status from ALL user's brands ───
+            user_memberships = db.execute(
+                select(UserBrand).where(
+                    UserBrand.user_id == user_id
+                )
+            ).scalars().all()
 
-        for item in user_memberships:
-            item.is_default = False
+            for item in user_memberships:
+                item.is_default = False
 
-        # Set the selected brand as default.
-        membership.is_default = True
+            # ⭐ Step 2: FLUSH — sends UPDATE ... SET is_default=FALSE to DB
+            #   This guarantees the previous default is removed in the DB
+            #   BEFORE we attempt to set a new default.
+            db.flush()
 
-        db.commit()
+            # ─── Step 3: Set the selected brand as the new default ───
+            membership.is_default = True
+
+            # ⭐ Step 4: FLUSH again
+            db.flush()
+
+            # ─── Step 5: Final commit ───
+            db.commit()
+
+        except Exception:
+            db.rollback()
+            raise
 
         brand = db.get(Brand, brand_id)
 
         if brand is None:
             return None
+
+        db.refresh(membership)
 
         return {
             "id": brand.id,

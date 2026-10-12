@@ -38,6 +38,12 @@ from app.repositories.post_repository import (
     update_post_template,
 )
 from app.repositories.user_repository import get_user_by_id
+
+from app.repositories.brand_repository import get_brand_by_id
+from app.repositories.social_account_repository import (
+    get_brand_social_account_by_id,
+)
+from app.repositories.worker_repository import create_post_targets
 from app.schemas.posts import (
     CreatePostRequest,
     GeneratePostRequest,   
@@ -56,6 +62,71 @@ router = APIRouter(
 )
 
 
+# @router.post("/posts/")
+# def create_post(
+#     req: CreatePostRequest,
+#     current_user: dict = Depends(get_current_user),
+# ):
+#     user_id = current_user["user_id"]
+
+#     start = datetime.fromisoformat(
+#         req.start_date.replace("Z", "+00:00")
+#     )
+
+#     end = (
+#         datetime.fromisoformat(
+#             req.end_date.replace("Z", "+00:00")
+#         )
+#         if req.end_date
+#         else None
+#     )
+
+#     template = create_post_template(
+#         user_id=user_id,
+#         content_text=req.content_text,
+#         media_url=req.media_url,
+#         platforms=req.platforms,
+#         recurrence_type=req.recurrence_type,
+#         interval_days=req.interval_days,
+#         start_date=start,
+#         end_date=end,
+#         max_occurrences=req.max_occurrences,
+#         timezone=req.timezone,
+#     )
+
+#     template_id = template["id"]
+
+#     dates = calc_dates(
+#         recurrence_type=req.recurrence_type,
+#         start_date=start,
+#         interval_days=req.interval_days,
+#         count=30,
+#         end_date=end,
+#         max_occurrences=req.max_occurrences,
+#     )
+
+#     created_posts = []
+
+#     for scheduled_date in dates:
+#         post = create_scheduled_post(
+#             template_id,
+#             scheduled_date,
+#         )
+
+#         created_posts.append(
+#             {
+#                 "post_id": post["id"],
+#                 "scheduled_at": scheduled_date.isoformat(),
+#             }
+#         )
+
+#     return {
+#         "message": "Post scheduled successfully ✅",
+#         "template_id": template_id,
+#         "total_scheduled": len(created_posts),
+#         "upcoming_posts": created_posts[:5],
+#     }
+
 @router.post("/posts/")
 def create_post(
     req: CreatePostRequest,
@@ -63,6 +134,57 @@ def create_post(
 ):
     user_id = current_user["user_id"]
 
+    # ---------------------------------------------------------
+    # 1. Validate selected brand
+    # ---------------------------------------------------------
+    brand = get_brand_by_id(
+        user_id=user_id,
+        brand_id=req.brand_id,
+    )
+
+    if not brand:
+        raise HTTPException(
+            status_code=404,
+            detail="Brand not found or you do not have access to this brand",
+        )
+
+    # ---------------------------------------------------------
+    # 2. Validate selected social accounts
+    # ---------------------------------------------------------
+    selected_accounts = []
+
+    for account_id in req.social_account_ids:
+        account = get_brand_social_account_by_id(
+            account_id=account_id,
+            user_id=user_id,
+            brand_id=req.brand_id,
+        )
+
+        if not account:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Social account {account_id} "
+                    "does not belong to the selected brand"
+                ),
+            )
+
+        selected_accounts.append(account)
+
+    # ---------------------------------------------------------
+    # 3. Prepare post targets
+    # ---------------------------------------------------------
+    post_targets = [
+        {
+            "social_account_id": account["id"],
+            "platform": account["platform"],
+        }
+        for account in selected_accounts
+    ]
+
+    # ---------------------------------------------------------
+    # 4. Parse dates
+    # ---------------------------------------------------------
     start = datetime.fromisoformat(
         req.start_date.replace("Z", "+00:00")
     )
@@ -75,6 +197,9 @@ def create_post(
         else None
     )
 
+    # ---------------------------------------------------------
+    # 5. Create post template
+    # ---------------------------------------------------------
     template = create_post_template(
         user_id=user_id,
         content_text=req.content_text,
@@ -90,6 +215,9 @@ def create_post(
 
     template_id = template["id"]
 
+    # ---------------------------------------------------------
+    # 6. Calculate scheduled dates
+    # ---------------------------------------------------------
     dates = calc_dates(
         recurrence_type=req.recurrence_type,
         start_date=start,
@@ -101,10 +229,19 @@ def create_post(
 
     created_posts = []
 
+    # ---------------------------------------------------------
+    # 7. Create scheduled posts + targets
+    # ---------------------------------------------------------
     for scheduled_date in dates:
+
         post = create_scheduled_post(
             template_id,
             scheduled_date,
+        )
+
+        create_post_targets(
+            scheduled_post_id=post["id"],
+            targets=post_targets,
         )
 
         created_posts.append(
@@ -114,9 +251,14 @@ def create_post(
             }
         )
 
+    # ---------------------------------------------------------
+    # 8. Response
+    # ---------------------------------------------------------
     return {
         "message": "Post scheduled successfully ✅",
         "template_id": template_id,
+        "brand_id": req.brand_id,
+        "social_account_ids": req.social_account_ids,
         "total_scheduled": len(created_posts),
         "upcoming_posts": created_posts[:5],
     }

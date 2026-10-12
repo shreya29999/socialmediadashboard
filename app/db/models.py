@@ -58,11 +58,14 @@ class SocialAccount(Base):
     __tablename__ = "social_accounts"
 
     __table_args__ = (
+        # ⭐ Updated: include brand_id to allow same account
+        #    across multiple brands (or user-scoped)
         UniqueConstraint(
             "user_id",
+            "brand_id",
             "platform",
             "page_id",
-            name="uq_social_accounts_user_platform_page",
+            name="uq_social_accounts_user_brand_platform_page",
         ),
     )
 
@@ -75,6 +78,11 @@ class SocialAccount(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+    )
+
+    brand_id: Mapped[int | None] = mapped_column(
+        ForeignKey("brands.id", ondelete="CASCADE"),
+        nullable=True,
     )
 
     platform: Mapped[str] = mapped_column(
@@ -116,7 +124,6 @@ class SocialAccount(Base):
         DateTime,
         default=datetime.utcnow,
     )
-
 
 class Brand(Base):
     __tablename__ = "brands"
@@ -272,6 +279,10 @@ class PostTarget(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     scheduled_post_id: Mapped[int] = mapped_column(ForeignKey("scheduled_posts.id", ondelete="CASCADE"), nullable=False)
+    social_account_id: Mapped[int] = mapped_column(
+     ForeignKey("social_accounts.id", ondelete="CASCADE"),
+     nullable=False,
+     )
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

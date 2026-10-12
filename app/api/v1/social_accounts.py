@@ -1,6 +1,10 @@
 import httpx
 from fastapi import APIRouter, Depends
-
+from fastapi import HTTPException
+from app.repositories.social_account_repository import (
+    get_brand_social_accounts,
+)
+from app.repositories.brand_repository import get_brand_by_id
 from app.api.dependencies import get_current_user
 from app.repositories.social_account_repository import get_social_account
 
@@ -82,3 +86,67 @@ async def platform_accounts(current_user: dict = Depends(get_current_user)):
     else:
         accounts["linkedin"] = {"connected": False}
     return accounts
+
+
+
+
+@router.get("/brands/{brand_id}/accounts")
+async def brand_platform_accounts(
+    brand_id: int,
+    current_user: dict = Depends(get_current_user),
+):
+    user_id = current_user["user_id"]
+
+    brand = get_brand_by_id(
+        user_id=user_id,
+        brand_id=brand_id,
+    )
+
+    if not brand:
+        raise HTTPException(
+            status_code=404,
+            detail="Brand not found",
+        )
+
+    social_accounts = get_brand_social_accounts(
+        user_id=user_id,
+        brand_id=brand_id,
+    )
+
+    accounts = {}
+
+    for account in social_accounts:
+        platform = account["platform"]
+
+        if platform == "facebook":
+            accounts.setdefault("facebook", []).append({
+                "id": account["id"],
+                "connected": True,
+                "page_id": account["page_id"],
+                "name": account["account_name"] or "Facebook Page",
+                "followers": 0,
+            })
+
+        elif platform == "instagram":
+            accounts.setdefault("instagram", []).append({
+                "id": account["id"],
+                "connected": True,
+                "page_id": account["page_id"],
+                "name": account["account_name"] or "Instagram Account",
+                "username": "",
+                "followers": 0,
+            })
+
+        elif platform == "linkedin":
+            accounts.setdefault("linkedin", []).append({
+                "id": account["id"],
+                "connected": True,
+                "page_id": account["page_id"],
+                "name": account["account_name"] or "LinkedIn User",
+                "email": account["account_email"] or "",
+            })
+
+    return {
+        "brand_id": brand_id,
+        "accounts": accounts,
+    }
