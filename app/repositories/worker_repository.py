@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import aliased
-from datetime import datetime, timezone, timedelta
+
 from app.db.models import (
     PostApprovalStage,
     PostTarget,
@@ -12,6 +12,10 @@ from app.db.models import (
 )
 from app.db.session import SessionLocal
 
+
+# ---------------------------------------------------------------------------
+# Serialization helpers
+# ---------------------------------------------------------------------------
 
 def _post_dict(post, template):
     return {
@@ -37,6 +41,22 @@ def _post_dict(post, template):
         "platforms": template.platforms,
     }
 
+
+def _target_dict(target):
+    return {
+        "id": target.id,
+        "scheduled_post_id": target.scheduled_post_id,
+        "social_account_id": target.social_account_id,
+        "platform": target.platform,
+        "status": target.status,
+        "error_message": target.error_message,
+        "posted_at": target.posted_at,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Post queries
+# ---------------------------------------------------------------------------
 
 def get_posts_due_for_confirmation():
     """
@@ -68,6 +88,7 @@ def get_posts_due_for_confirmation():
             _post_dict(post, template)
             for post, template in rows
         ]
+
 
 def get_expired_awaiting_posts():
     with SessionLocal() as db:
@@ -136,6 +157,7 @@ def get_posts_ready_to_publish():
             for post, template in rows
         ]
 
+
 def update_post_status(post_id: int, status: str):
     with SessionLocal() as db:
         stmt = (
@@ -148,25 +170,9 @@ def update_post_status(post_id: int, status: str):
         db.commit()
 
 
-# def get_targets_for_post(scheduled_post_id: int):
-#     with SessionLocal() as db:
-#         stmt = select(PostTarget).where(
-#             PostTarget.scheduled_post_id == scheduled_post_id
-#         )
-
-#         targets = db.execute(stmt).scalars().all()
-
-#         return [
-#             {
-#                 "id": target.id,
-#                 "scheduled_post_id": target.scheduled_post_id,
-#                 "platform": target.platform,
-#                 "status": target.status,
-#                 "error_message": target.error_message,
-#                 "posted_at": target.posted_at,
-#             }
-#             for target in targets
-#         ]
+# ---------------------------------------------------------------------------
+# Post targets
+# ---------------------------------------------------------------------------
 
 def get_targets_for_post(scheduled_post_id: int):
     with SessionLocal() as db:
@@ -176,74 +182,88 @@ def get_targets_for_post(scheduled_post_id: int):
 
         targets = db.execute(stmt).scalars().all()
 
-        return [
-            {
-                "id": target.id,
-                "scheduled_post_id": target.scheduled_post_id,
-                "social_account_id": target.social_account_id,
-                "platform": target.platform,
-                "status": target.status,
-                "error_message": target.error_message,
-                "posted_at": target.posted_at,
-            }
-            for target in targets
-        ]
+        return [_target_dict(target) for target in targets]
 
 
+def get_social_account_id_for_platform(
+    post_id: int,
+    platform: str,
+):
+    """
+    Look up the social_account_id currently assigned to a given
+    platform for a post. Returns None if no target exists.
+    """
+    with SessionLocal() as db:
+        stmt = select(PostTarget).where(
+            PostTarget.scheduled_post_id == post_id,
+            PostTarget.platform == platform,
+        )
 
-# def create_post_targets(scheduled_post_id: int, platforms: list[str]):
-#     with SessionLocal() as db:
-#         for platform in platforms:
-#             target = PostTarget(
-#                 scheduled_post_id=scheduled_post_id,
-#                 platform=platform,
-#             )
-#             db.add(target)
+        target = db.execute(stmt).scalars().first()
 
-#         db.commit()
+        if not target:
+            return None
+
+        return target.social_account_id
+
 
 def create_post_targets(
     scheduled_post_id: int,
     targets: list[dict],
 ):
+    """
+    Create PostTarget rows.
+
+    Each element in `targets` MUST be a dict with:
+        - "platform": str
+        - "social_account_id": int
+
+    A defensive check is included so that passing the old
+    `list[str]` (platforms only) fails with a clear message
+    instead of `TypeError: string indices must be integers`.
+    """
+    if not isinstance(targets, list):
+        raise ValueError(
+            f"create_post_targets expected a list, got "
+            f"{type(targets).__name__}: {targets!r}"
+        )
+
+    if not targets:
+        raise ValueError("create_post_targets received an empty targets list")
+
     with SessionLocal() as db:
-        for target_data in targets:
+        for index, target_data in enumerate(targets):
+            if not isinstance(target_data, dict):
+                raise ValueError(
+                    f"create_post_targets: targets[{index}] must be a dict "
+                    f"with keys 'platform' and 'social_account_id', got "
+                    f"{type(target_data).__name__}: {target_data!r}"
+                )
+
+            platform = target_data.get("platform")
+            social_account_id = target_data.get("social_account_id")
+
+            if not platform:
+                raise ValueError(
+                    f"create_post_targets: targets[{index}] is missing "
+                    f"'platform'. Got: {target_data!r}"
+                )
+
+            if social_account_id is None:
+                raise ValueError(
+                    f"create_post_targets: targets[{index}] is missing "
+                    f"'social_account_id'. Got: {target_data!r}"
+                )
+
             target = PostTarget(
                 scheduled_post_id=scheduled_post_id,
-                social_account_id=target_data["social_account_id"],
-                platform=target_data["platform"],
+                social_account_id=social_account_id,
+                platform=platform,
             )
             db.add(target)
 
         db.commit()
 
-
-# def update_target_status(
-#     scheduled_post_id: int,
-#     platform: str,
-#     status: str,
-#     error_message: str | None = None,
-# ):
-#     with SessionLocal() as db:
-#         stmt = (
-#             update(PostTarget)
-#             .where(
-#                 PostTarget.scheduled_post_id == scheduled_post_id,
-#                 PostTarget.platform == platform,
-#             )
-#             .values(
-#                 status=status,
-#                 error_message=error_message,
-#                 posted_at=(
-#                     datetime.now(timezone.utc)
-#                     if status == "posted"
-#                     else None
-#                 ),
-#             )
-#         )
-
-#         db.execute(stmt)
-#         db.commit()
 
 def update_target_status(
     target_id: int,
@@ -270,6 +290,10 @@ def update_target_status(
         db.execute(stmt)
         db.commit()
 
+
+# ---------------------------------------------------------------------------
+# Tokens / approval
+# ---------------------------------------------------------------------------
 
 def save_confirmation_token(post_id: int, token: str):
     with SessionLocal() as db:
@@ -427,6 +451,10 @@ def update_hr_approval(
         db.commit()
         return True
 
+
+# ---------------------------------------------------------------------------
+# Templates / recurrence
+# ---------------------------------------------------------------------------
 
 def increment_occurrence_count(template_id: int):
     with SessionLocal() as db:

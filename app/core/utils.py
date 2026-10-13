@@ -263,41 +263,96 @@ def refresh_linkedin_token(refresh_token: str) -> Optional[dict]:
         return None
     
 
-def check_and_refresh_token(user_id: int, platform: str) -> Optional[str]:
+def check_and_refresh_token(
+    user_id: int,
+    platform: str,
+    account_id: int,
+) -> Optional[str]:
 
-    
-    account = get_social_account(user_id, platform)
+    from app.repositories.social_account_repository import (
+        get_social_account_by_id,
+    )
+
+    account = get_social_account_by_id(
+        account_id=account_id,
+        user_id=user_id,
+    )
+
     if not account:
-        logger.error("No %s account found for user %s", platform, user_id)
+        logger.error(
+            "No %s account found for user %s with account_id=%s",
+            platform,
+            user_id,
+            account_id,
+        )
         return None
 
-    now        = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
     expires_at = account["token_expires_at"]
 
+    # No expiry information
     if not expires_at:
-        logger.info("%s token has no expiry, using as is", platform)
+        logger.info(
+            "%s token has no expiry, using existing token",
+            platform,
+        )
         return account["access_token"]
 
+    # Make datetime timezone-aware
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
 
+    # Token still valid
     if expires_at > now + timedelta(hours=1):
-        logger.info("%s token still valid", platform)
+        logger.info(
+            "%s token still valid for account %s",
+            platform,
+            account_id,
+        )
         return account["access_token"]
 
-    logger.info("Refreshing %s token for user %s", platform, user_id)
+    logger.info(
+        "Refreshing %s token for account %s",
+        platform,
+        account_id,
+    )
 
     if platform in ("facebook", "instagram"):
-        result = refresh_facebook_token(account["access_token"])
+        result = refresh_facebook_token(
+            account["access_token"]
+        )
+
     elif platform == "linkedin":
-        result = refresh_linkedin_token(account.get("refresh_token"))
+        result = refresh_linkedin_token(
+            account.get("refresh_token")
+        )
+
     else:
+        logger.error(
+            "Unsupported platform: %s",
+            platform,
+        )
         return None
 
     if result:
-        update_access_token(account["id"], result["access_token"], result["expires_at"])
-        logger.info("%s token refreshed successfully", platform)
+        update_access_token(
+            account["id"],
+            result["access_token"],
+            result["expires_at"],
+        )
+
+        logger.info(
+            "%s token refreshed successfully for account %s",
+            platform,
+            account_id,
+        )
+
         return result["access_token"]
 
-    logger.warning("%s refresh failed, trying existing token", platform)
+    logger.warning(
+        "%s token refresh failed for account %s, using existing token",
+        platform,
+        account_id,
+    )
+
     return account["access_token"]

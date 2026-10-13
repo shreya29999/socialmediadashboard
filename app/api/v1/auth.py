@@ -1054,29 +1054,29 @@ async def facebook_callback(
 # LINKEDIN — CONNECT (2 endpoints for 2 scopes)
 # ═══════════════════════════════════════════════════════════
 
-@router.get("/linkedin/connect")
-def linkedin_connect(current_user: dict = Depends(get_current_user)):
-    """User-scoped LinkedIn connect."""
-    user_id = current_user["user_id"]
-    existing = get_social_account(user_id, "linkedin")
+# @router.get("/linkedin/connect")
+# def linkedin_connect(current_user: dict = Depends(get_current_user)):
+#     """User-scoped LinkedIn connect."""
+#     user_id = current_user["user_id"]
+#     existing = get_social_account(user_id, "linkedin")
 
-    if existing:
-        return {
-            "already_connected": True,
-            "message": "LinkedIn already connected ✅",
-            "page_id": existing["page_id"],
-        }
+#     if existing:
+#         return {
+#             "already_connected": True,
+#             "message": "LinkedIn already connected ✅",
+#             "page_id": existing["page_id"],
+#         }
 
-    url = (
-        f"https://www.linkedin.com/oauth/v2/authorization"
-        f"?response_type=code"
-        f"&client_id={LINKEDIN_CLIENT_ID}"
-        f"&redirect_uri={LINKEDIN_REDIRECT_URI}"
-        f"&scope=openid%20profile%20email%20w_member_social"
-        f"&state={user_id}"
-    )
+#     url = (
+#         f"https://www.linkedin.com/oauth/v2/authorization"
+#         f"?response_type=code"
+#         f"&client_id={LINKEDIN_CLIENT_ID}"
+#         f"&redirect_uri={LINKEDIN_REDIRECT_URI}"
+#         f"&scope=openid%20profile%20email%20w_member_social"
+#         f"&state={user_id}"
+#     )
 
-    return {"already_connected": False, "oauth_url": url}
+#     return {"already_connected": False, "oauth_url": url}
 
 
 @router.get("/linkedin/brands/{brand_id}/connect")
