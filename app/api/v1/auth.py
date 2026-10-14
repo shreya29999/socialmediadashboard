@@ -736,33 +736,83 @@ def _parse_oauth_state(state: str) -> tuple[int, int | None]:
 # REGISTER
 # ═══════════════════════════════════════════════════════════
 
+# @router.post("/register")
+# def register(req: RegisterRequest):
+#     email = normalize_email(req.email)
+#     existing = get_user_by_email(email)
+#     if existing:
+#         raise HTTPException(status_code=400, detail="Email already registered")
+#     hashed = hash_password(req.password)
+#     admins = get_admins() or []
+#     resolved_admin = resolve_admin_for_signup(
+#         email=email,
+#         invite_code=req.invite_code,
+#         admin_email=req.admin_email,
+#         admins=admins,
+#         domain_mapping={"shilsha.com": "admin@shilsha.com"},
+#     )
+#     admin_id = resolved_admin["id"] if resolved_admin else None
+#     user = create_user(email, hashed, admin_id=admin_id)
+#     token = create_access_token(user["id"], user["email"])
+#     return {
+#         "message": "Registered successfully",
+#         "access_token": token,
+#         "user_id": user["id"],
+#         "email": user["email"],
+#         "admin_id": admin_id,
+#         "assigned_admin": bool(admin_id),
+#     }
+
+
+
+
 @router.post("/register")
 def register(req: RegisterRequest):
     email = normalize_email(req.email)
+
     existing = get_user_by_email(email)
     if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
+
     hashed = hash_password(req.password)
+
     admins = get_admins() or []
+
     resolved_admin = resolve_admin_for_signup(
         email=email,
         invite_code=req.invite_code,
         admin_email=req.admin_email,
         admins=admins,
-        domain_mapping={"shilsha.com": "admin@shilsha.com"},
+        domain_mapping={
+            "shilsha.com": "admin@shilsha.com"
+        },
     )
+
     admin_id = resolved_admin["id"] if resolved_admin else None
-    user = create_user(email, hashed, admin_id=admin_id)
-    token = create_access_token(user["id"], user["email"])
+
+    user = create_user(
+        email,
+        hashed,
+        admin_id=admin_id
+    )
+
+    token = create_access_token(
+        user["id"],
+        user["email"]
+    )
+
     return {
         "message": "Registered successfully",
         "access_token": token,
         "user_id": user["id"],
         "email": user["email"],
+        "role": user.get("role", "superadmin"),
         "admin_id": admin_id,
         "assigned_admin": bool(admin_id),
     }
-
 
 # ═══════════════════════════════════════════════════════════
 # LOGIN

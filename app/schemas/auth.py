@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 from enum import Enum
 from pydantic import BaseModel
 
@@ -11,7 +11,7 @@ class RegisterRequest(BaseModel):
     timezone    : Optional[str] = "UTC"
     invite_code : Optional[str] = None
     admin_email : Optional[str] = None
-    role        : Optional[UserRole] = UserRole.USER
+    role: Literal["user", "superadmin"]
 class LoginRequest(BaseModel):
     email    : str
     password : str
