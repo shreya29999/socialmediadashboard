@@ -34,7 +34,7 @@ app.add_middleware(
         "http://localhost:5174",
         "http://127.0.0.1:5174",
         "https://espresso-expulsion-luckily.ngrok-free.dev",
-        " https://social-media-dashboard-frontend-2.onrender.com",
+        "https://social-media-dashboard-frontend-2.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
