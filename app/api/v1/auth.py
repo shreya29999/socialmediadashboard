@@ -768,17 +768,52 @@ def register(req: RegisterRequest):
 # LOGIN
 # ═══════════════════════════════════════════════════════════
 
+# @router.post("/login")
+# def login(req: LoginRequest):
+#     email = normalize_email(req.email)
+#     user = get_user_by_email(email)
+#     if not user or not verify_password(req.password, user["password_hash"]):
+#         raise HTTPException(status_code=401, detail="Invalid email or password")
+
+#     update_last_login(user["id"])
+#     token = create_access_token(user["id"], user["email"])
+
+#     # ⭐ Get user's default brand
+#     default_brand = get_default_brand(user["id"])
+
+#     return {
+#         "message": "Login successful",
+#         "access_token": token,
+#         "user_id": user["id"],
+#         "email": user["email"],
+#         "role": user["role"],
+#         "admin_id": user.get("admin_id"),
+#         "default_brand": default_brand,     # ⭐ NEW
+#     }
+
+
+
 @router.post("/login")
 def login(req: LoginRequest):
     email = normalize_email(req.email)
     user = get_user_by_email(email)
-    if not user or not verify_password(req.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+
+    if not user or not verify_password(
+        req.password,
+        user["password_hash"]
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password"
+        )
 
     update_last_login(user["id"])
-    token = create_access_token(user["id"], user["email"])
 
-    # ⭐ Get user's default brand
+    token = create_access_token(
+        user["id"],
+        user["email"]
+    )
+
     default_brand = get_default_brand(user["id"])
 
     return {
@@ -786,11 +821,13 @@ def login(req: LoginRequest):
         "access_token": token,
         "user_id": user["id"],
         "email": user["email"],
-        "role": user["role"],
-        "admin_id": user.get("admin_id"),
-        "default_brand": default_brand,     # ⭐ NEW
-    }
 
+        # For Super Admin / Admin / User authorization
+        "role": user["role"],
+
+        "admin_id": user.get("admin_id"),
+        "default_brand": default_brand,
+    }
 
 # ═══════════════════════════════════════════════════════════
 # ME
