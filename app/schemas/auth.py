@@ -19,6 +19,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     email    : str
     password : str
+    role: Literal["user", "admin", "superadmin"]
 class RejectRequest(BaseModel):
     token  : str
     reason : Optional[str] = None

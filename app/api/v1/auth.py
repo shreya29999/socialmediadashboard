@@ -848,21 +848,23 @@ def login(req: LoginRequest):
     email = normalize_email(req.email)
     user = get_user_by_email(email)
 
-    if not user or not verify_password(
-        req.password,
-        user["password_hash"]
-    ):
+    # 1. Verify credentials first.
+    if not user or not verify_password(req.password, user["password_hash"]):
         raise HTTPException(
             status_code=401,
-            detail="Invalid email or password"
+            detail="Invalid email or password",
+        )
+
+    # 2. ⭐ THEN check the role — outside the credentials block, at the same level.
+    if user["role"] != req.role:
+        raise HTTPException(
+            status_code=403,
+            detail=f"This account is not registered as {req.role}",
         )
 
     update_last_login(user["id"])
 
-    token = create_access_token(
-        user["id"],
-        user["email"]
-    )
+    token = create_access_token(user["id"], user["email"])
 
     default_brand = get_default_brand(user["id"])
 
@@ -871,14 +873,10 @@ def login(req: LoginRequest):
         "access_token": token,
         "user_id": user["id"],
         "email": user["email"],
-
-        # For Super Admin / Admin / User authorization
         "role": user["role"],
-
         "admin_id": user.get("admin_id"),
         "default_brand": default_brand,
     }
-
 # ═══════════════════════════════════════════════════════════
 # ME
 # ═══════════════════════════════════════════════════════════
