@@ -765,7 +765,6 @@ def _parse_oauth_state(state: str) -> tuple[int, int | None]:
 
 
 
-
 @router.post("/register")
 def register(req: RegisterRequest):
     email = normalize_email(req.email)
@@ -796,7 +795,8 @@ def register(req: RegisterRequest):
     user = create_user(
         email,
         hashed,
-        admin_id=admin_id
+        admin_id=admin_id,
+        role=req.role,
     )
 
     token = create_access_token(
@@ -809,7 +809,7 @@ def register(req: RegisterRequest):
         "access_token": token,
         "user_id": user["id"],
         "email": user["email"],
-        "role": user.get("role", "superadmin"),
+        "role": user["role"],
         "admin_id": admin_id,
         "assigned_admin": bool(admin_id),
     }
