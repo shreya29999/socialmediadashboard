@@ -6,18 +6,16 @@ from app.repositories.user_repository import (
     save_user_profile as save_user_profile_repo,
     update_user_logo,
     update_user_footer,
-    
-
 )
 import cloudinary
 import cloudinary.uploader
 from app.core.config import configure_cloudinary
 from app.schemas.users import UserProfileRequest
+
 logger = logging.getLogger(__name__)
 
 configure_cloudinary()
 router = APIRouter(prefix="/user", tags=["Users"])
-
 
 
 @router.put("/profile/logo")
@@ -80,6 +78,15 @@ async def upload_profile_logo(
             country_code=None,
             language=None,
             posts_per_week=3,
+            # ⭐ NEW — defaults for branding fields
+            logo_size=None,
+            logo_position_x=None,
+            logo_position_y=None,
+            footer_height=None,
+            footer_width=None,
+            footer_position_x=None,
+            footer_position_y=None,
+            overlay_color=None,
         )
 
         return {
@@ -96,6 +103,7 @@ async def upload_profile_logo(
             status_code=500,
             detail=f"Logo upload failed: {str(e)}",
         )
+
 
 @router.put("/profile/footer")
 async def upload_profile_footer(
@@ -178,7 +186,6 @@ async def upload_profile_footer(
         ) from exc
 
 
-
 @router.post("/profile")
 def save_user_profile(
     req: UserProfileRequest,
@@ -207,12 +214,24 @@ def save_user_profile(
         persona=req.persona,
         industry=industry,
         brand_name=req.brand_name,
-        logo_url=req.logo_url,  
+        logo_url=req.logo_url,
         tone=tone,
         audience=audience,
         country_code=req.country_code,
         language=req.language,
         posts_per_week=req.posts_per_week,
+
+        # ⭐ NEW — branding fields (dynamic from frontend)
+        logo_size=req.logo_size,
+        logo_position_x=req.logo_position_x,
+        logo_position_y=req.logo_position_y,
+
+        footer_height=req.footer_height,
+        footer_width=req.footer_width,
+        footer_position_x=req.footer_position_x,
+        footer_position_y=req.footer_position_y,
+
+        overlay_color=req.overlay_color,
     )
 
     return {"message": "Profile saved ✅"}

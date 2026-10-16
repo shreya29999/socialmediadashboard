@@ -93,6 +93,7 @@ async def update_overlay(
             overlay_text=overlay_text,
             overlay_position=req.position,
             overlay_text_size=req.text_size,
+            overlay_color=req.color,       
         )
 
         if not result:
@@ -107,6 +108,7 @@ async def update_overlay(
             "overlay_text": result["overlay_text"],
             "overlay_position": result["overlay_position"],
             "overlay_text_size": result["overlay_text_size"],
+            "overlay_color": result.get("overlay_color"),     # ⭐ ADD THIS
         }
 
     except HTTPException:
@@ -116,4 +118,4 @@ async def update_overlay(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to update overlay settings: {str(e)}",
-        )    
+        )

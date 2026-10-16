@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.db.models import User, UserProfile
 from app.db.session import SessionLocal
 
+
 def create_user(
     email: str,
     password_hash: str,
@@ -103,12 +104,39 @@ def get_user_profile(user_id: int):
             "industry": profile.industry,
             "brand_name": profile.brand_name,
             "logo_url": profile.logo_url,
+
+            # ⭐ NEW — Logo size + position
+            "logo_size": profile.logo_size
+            if profile.logo_size is not None
+            else 60,
+            "logo_position_x": profile.logo_position_x
+            if profile.logo_position_x is not None
+            else 4,
+            "logo_position_y": profile.logo_position_y
+            if profile.logo_position_y is not None
+            else 4,
+
             "footer_enabled": profile.footer_enabled,
             "footer_text": profile.footer_text,
             "footer_url": profile.footer_url,
+
+            # ⭐ NEW — Footer size + position
+            "footer_height": profile.footer_height
+            if profile.footer_height is not None
+            else 60,
+            "footer_width": profile.footer_width
+            if profile.footer_width is not None
+            else 100,
+            "footer_position_x": profile.footer_position_x or 0,
+            "footer_position_y": profile.footer_position_y or 0,
+
             "overlay_text": profile.overlay_text,
             "overlay_position": profile.overlay_position,
             "overlay_text_size": profile.overlay_text_size,
+
+            # ⭐ NEW — Overlay text color
+            "overlay_color": profile.overlay_color or "#ffffff",
+
             "tone": profile.tone,
             "audience": profile.audience,
             "country_code": profile.country_code,
@@ -143,7 +171,6 @@ def update_last_login(user_id: int):
         return {"id": user.id, "last_login_at": user.last_login_at}
 
 
-
 def get_admins():
     with SessionLocal() as db:
         admins = db.execute(
@@ -163,6 +190,7 @@ def get_admins():
             for admin in admins
         ]
 
+
 def save_user_profile(
     user_id: int,
     persona: str | None,
@@ -174,6 +202,20 @@ def save_user_profile(
     country_code: str | None,
     language: str | None,
     posts_per_week: int,
+
+    # ⭐ NEW — Logo size + position
+    logo_size: int | None = None,
+    logo_position_x: int | None = None,
+    logo_position_y: int | None = None,
+
+    # ⭐ NEW — Footer size + position
+    footer_height: int | None = None,
+    footer_width: int | None = None,
+    footer_position_x: int | None = None,
+    footer_position_y: int | None = None,
+
+    # ⭐ NEW — Overlay color
+    overlay_color: str | None = None,
 ):
     with SessionLocal() as db:
         profile = db.execute(
@@ -192,6 +234,27 @@ def save_user_profile(
             profile.country_code = country_code
             profile.language = language
             profile.posts_per_week = posts_per_week
+
+            # ⭐ NEW — update if provided
+            if logo_size is not None:
+                profile.logo_size = logo_size
+            if logo_position_x is not None:
+                profile.logo_position_x = logo_position_x
+            if logo_position_y is not None:
+                profile.logo_position_y = logo_position_y
+
+            if footer_height is not None:
+                profile.footer_height = footer_height
+            if footer_width is not None:
+                profile.footer_width = footer_width
+            if footer_position_x is not None:
+                profile.footer_position_x = footer_position_x
+            if footer_position_y is not None:
+                profile.footer_position_y = footer_position_y
+
+            if overlay_color is not None:
+                profile.overlay_color = overlay_color
+
         else:
             profile = UserProfile(
                 user_id=user_id,
@@ -204,6 +267,26 @@ def save_user_profile(
                 country_code=country_code,
                 language=language,
                 posts_per_week=posts_per_week,
+
+                # ⭐ NEW
+                logo_size=logo_size if logo_size is not None else 60,
+                logo_position_x=logo_position_x
+                if logo_position_x is not None
+                else 4,
+                logo_position_y=logo_position_y
+                if logo_position_y is not None
+                else 4,
+
+                footer_height=footer_height
+                if footer_height is not None
+                else 60,
+                footer_width=footer_width
+                if footer_width is not None
+                else 100,
+                footer_position_x=footer_position_x or 0,
+                footer_position_y=footer_position_y or 0,
+
+                overlay_color=overlay_color or "#ffffff",
             )
             db.add(profile)
 
@@ -217,9 +300,22 @@ def save_user_profile(
             "industry": profile.industry,
             "brand_name": profile.brand_name,
             "logo_url": profile.logo_url,
+
+            # ⭐ NEW
+            "logo_size": profile.logo_size,
+            "logo_position_x": profile.logo_position_x,
+            "logo_position_y": profile.logo_position_y,
+
             "footer_enabled": profile.footer_enabled,
             "footer_text": profile.footer_text,
             "footer_url": profile.footer_url,
+
+            # ⭐ NEW
+            "footer_height": profile.footer_height,
+            "footer_width": profile.footer_width,
+            "footer_position_x": profile.footer_position_x,
+            "footer_position_y": profile.footer_position_y,
+
             "tone": profile.tone,
             "audience": profile.audience,
             "country_code": profile.country_code,
@@ -227,7 +323,8 @@ def save_user_profile(
             "posts_per_week": profile.posts_per_week,
             "created_at": profile.created_at,
             "updated_at": profile.updated_at,
-        }  
+        }
+
 
 def update_user_logo(user_id: int, logo_url: str):
     with SessionLocal() as db:
@@ -250,6 +347,7 @@ def update_user_logo(user_id: int, logo_url: str):
             "user_id": profile.user_id,
             "logo_url": profile.logo_url,
         }
+
 
 def update_user_footer(user_id: int, footer_url: str):
     with SessionLocal() as db:
@@ -275,11 +373,13 @@ def update_user_footer(user_id: int, footer_url: str):
             "footer_url": profile.footer_url,
         }
 
+
 def update_user_overlay(
     user_id: int,
     overlay_text: str | None,
     overlay_position: str,
     overlay_text_size: int,
+    overlay_color: str | None = None,        # ⭐ NEW
 ):
     with SessionLocal() as db:
         profile = db.execute(
@@ -295,6 +395,10 @@ def update_user_overlay(
         profile.overlay_position = overlay_position
         profile.overlay_text_size = overlay_text_size
 
+        # ⭐ NEW — update color if provided
+        if overlay_color is not None:
+            profile.overlay_color = overlay_color
+
         db.commit()
         db.refresh(profile)
 
@@ -304,7 +408,9 @@ def update_user_overlay(
             "overlay_text": profile.overlay_text,
             "overlay_position": profile.overlay_position,
             "overlay_text_size": profile.overlay_text_size,
+            "overlay_color": profile.overlay_color,        # ⭐ NEW
         }
+
 
 def get_superadmin():
     with SessionLocal() as db:

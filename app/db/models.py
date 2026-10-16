@@ -15,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -32,34 +33,16 @@ class User(Base):
 
     admin = relationship("User", remote_side="User.id", uselist=False)
     brand_memberships = relationship(
-    "UserBrand",
-    back_populates="user",
-    cascade="all, delete-orphan",
-     )
+        "UserBrand",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
-
-
-
-# class SocialAccount(Base):
-#     __tablename__ = "social_accounts"
-
-#     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-#     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-#     platform: Mapped[str] = mapped_column(String(50), nullable=False)
-#     access_token: Mapped[str] = mapped_column(Text, nullable=False)
-#     refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-#     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-#     page_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-#     account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-#     account_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-#     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 class SocialAccount(Base):
     __tablename__ = "social_accounts"
 
     __table_args__ = (
-        # ⭐ Updated: include brand_id to allow same account
-        #    across multiple brands (or user-scoped)
         UniqueConstraint(
             "user_id",
             "brand_id",
@@ -124,6 +107,7 @@ class SocialAccount(Base):
         DateTime,
         default=datetime.utcnow,
     )
+
 
 class Brand(Base):
     __tablename__ = "brands"
@@ -234,6 +218,7 @@ class UserBrand(Base):
         ),
     )
 
+
 class PostTemplate(Base):
     __tablename__ = "post_templates"
 
@@ -280,9 +265,9 @@ class PostTarget(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     scheduled_post_id: Mapped[int] = mapped_column(ForeignKey("scheduled_posts.id", ondelete="CASCADE"), nullable=False)
     social_account_id: Mapped[int] = mapped_column(
-     ForeignKey("social_accounts.id", ondelete="CASCADE"),
-     nullable=False,
-     )
+        ForeignKey("social_accounts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="pending")
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -293,48 +278,98 @@ class UserProfile(Base):
     __tablename__ = "user_profiles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
-    persona: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    industry: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    brand_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    footer_enabled: Mapped[bool] = mapped_column(
-    Boolean,
-    default=False,
-    nullable=False,
-    )  
-    footer_url: Mapped[str | None] = mapped_column(
-    String(500),
-    nullable=True,
-     )
-    footer_text: Mapped[str | None] = mapped_column(
-    String(500),
-    nullable=True,
-     )
-    overlay_text: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-   
-
-    overlay_text_size: Mapped[int] = mapped_column(
-    Integer,
-    default=48,
-    nullable=False,
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
     )
 
-    overlay_position: Mapped[str] = mapped_column(
-    String(50),
-    default="bottom-center",
-    nullable=False,
-     )
+    # ⭐ Multi-select fields — use Text for unlimited length
+    persona: Mapped[str | None] = mapped_column(Text, nullable=True)
+    industry: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    audience: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-   
-    tone: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    audience: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Single-value fields
+    brand_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # ⭐ NEW — Logo size + position
+    logo_size: Mapped[int | None] = mapped_column(
+        Integer,
+        default=60,
+        nullable=True,
+    )
+    logo_position_x: Mapped[int | None] = mapped_column(
+        Integer,
+        default=4,
+        nullable=True,
+    )
+    logo_position_y: Mapped[int | None] = mapped_column(
+        Integer,
+        default=4,
+        nullable=True,
+    )
+
+    footer_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+    footer_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    footer_text: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    # ⭐ NEW — Footer size + position
+    footer_height: Mapped[int | None] = mapped_column(
+        Integer,
+        default=60,
+        nullable=True,
+    )
+    footer_width: Mapped[int | None] = mapped_column(
+        Integer,
+        default=100,
+        nullable=True,
+    )
+    footer_position_x: Mapped[int | None] = mapped_column(
+        Integer,
+        default=0,
+        nullable=True,
+    )
+    footer_position_y: Mapped[int | None] = mapped_column(
+        Integer,
+        default=0,
+        nullable=True,
+    )
+
+    overlay_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overlay_text_size: Mapped[int] = mapped_column(
+        Integer,
+        default=48,
+        nullable=False,
+    )
+    overlay_position: Mapped[str] = mapped_column(
+        String(50),
+        default="bottom-center",
+        nullable=False,
+    )
+
+    # ⭐ NEW — Overlay text color
+    overlay_color: Mapped[str | None] = mapped_column(
+        String(20),
+        default="#ffffff",
+        nullable=True,
+    )
+
     country_code: Mapped[str | None] = mapped_column(String(5), nullable=True)
     language: Mapped[str | None] = mapped_column(String(20), nullable=True)
     posts_per_week: Mapped[int] = mapped_column(Integer, default=3)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
 
 
 class EventsCache(Base):
